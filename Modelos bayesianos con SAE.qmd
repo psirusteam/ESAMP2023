@@ -19,12 +19,22 @@ library(furrr)
 library(purrr)
 library(tidyr)
 library(knitr)
+library(kableExtra)
 select <- dplyr::select
 
 #knitr::opts_chunk$set(eval = FALSE)
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ggplot2::theme_set(theme_bw())
 options(digits = 4)
+
+tba <- function(dat, cap = NA){
+ kable(dat,
+      format = "latex", digits =  4,
+      caption = cap) %>% 
+     kable_styling(bootstrap_options = "striped", full_width = F)%>%
+         kable_classic_2(full_width = F)
+}
+
 ```
 
 
@@ -272,8 +282,190 @@ include_graphics("www/F_04_flujo_sae.PNG")
   -   Aumento de la complejidad en los contenidos de los cuestionarios y por lo tanto la carga de respuesta.
   
   -   Aumento de la demanda de análisis secundarios, uso público y archivos de datos de uso restringido.
+  
+
 
 #  Función Generalizada de Varianza (FGV)
+
+## ¿Cuál es la importancia de la Función Generalizada de Varianza?
+
+  -   La varianza del estimador directo es un insumo crucial en el modelo de áreas.
+
+  -   No es posible calcular la varianza del estimador directo a nivel de dominio.
+  
+  -   En dominios con un tamaño de muestra muy pequeño, las estimaciones de varianza pueden ser poco fiables.
+  
+  -   Se sugiere la utilidad de un modelo de suavizamiento de las varianzas.
+  
+  - El propósito del suavizamiento es eliminar el ruido y la volatilidad en las estimaciones de varianza para obtener una señal más precisa del proceso.
+
+## La Función Generalizada de Varianza
+
+Hidiroglou (2019) establece que:  $E_{\mathscr{MP}}\left(\hat{\theta}^{dir}_d\right)=\boldsymbol{x}^{T}_{d}\boldsymbol{\beta}$ y $V_{\mathscr{MP}}\left(\hat{\theta}^{dir}_d\right)=\sigma_{u}^2+\tilde{\sigma}^2_{d}$, en donde el subíndice  $\mathscr{MP}$ hace referencia a la inferencia doble que se debe tener en cuenta en este tipo de ajustes.
+
+-   $\mathscr{M}$ hace referencia a la medida de probabilidad inducida por el modelamiento y la inclusión de las covariables auxiliares ($\boldsymbol{x}_{d}$).
+
+-   $\mathscr{P}$ hace referencia a la medida de probabilidad inducida por el diseño de muestreo complejo que induce las estimaciones directas. 
+
+## Estimación de la Varianza de Muestreo  
+
+La FGV consiste en ajustar un modelo log-lineal a la varianza directa estimada. Partiendo del hecho de que se tiene acceso a un estimador insesgado de $\sigma^2$, denotado por $\hat{\sigma}^2$ se tiene que:
+$$
+E_{\mathscr{MP}}\left(\hat{\sigma}_{d}^{2}\right)=E_{\mathscr{M}}\left(E_{\mathscr{P}}\left(\hat{\sigma}_{d}^{2}\right)\right)=E_{\mathscr{M}}\left(\sigma_{d}^{2}\right)=\tilde{\sigma}_{d}^{2}
+$$
+
+La anterior igualdad puede interpretarse como que un estimador insesgado y simple de $\tilde{\sigma}_{d}^{2}$ puede ser $\hat{\sigma}_{d}^{2}$. 
+
+## Modelos de Suavizamiento  
+
+Rivest y Belmonte (2000) proponen modelos de suavizamiento para estimar las varianzas directas. Estos modelos se definen de la siguiente manera:
+
+$$
+\log\left(\hat{\sigma}_{d}^{2}\right)=\boldsymbol{z}_{d}^{T}\boldsymbol{\alpha}+\boldsymbol{\varepsilon}_{d}
+$$
+
+En donde $\boldsymbol{z}_{d}$ es un vector de covariables explicativas que son funciones de $\boldsymbol{x}_{d}$, $\boldsymbol{\alpha}$ es un vector de parámetros que deben ser estimados, $\boldsymbol{\varepsilon}_{d}$ son errores aleatorios con media cero y varianza constante, que se asumen idénticamente distribuidos condicionalmente sobre $\boldsymbol{z}_{d}$. 
+
+## Estimación Suavizada 
+
+-   La estimación suavizada de la varianza de muestreo está dada por:
+
+$$
+\tilde{\sigma}_{d}^{2}=E_{\mathscr{MP}}\left(\sigma_{d}^{2}\right)=\exp\left(\boldsymbol{z}_{d}^{T}\boldsymbol{\alpha}\right)\times\Delta
+$$
+
+  En donde, $E_{\mathscr{MP}}\left(\varepsilon_{d}\right)=\Delta$.
+
+-   Haciendo uso del método de los momentos, se tiene el siguiente estimador insesgado para $\Delta$: 
+$$
+\hat{\Delta}=\frac{\sum_{d=1}^{D}\hat{\sigma}_{d}^{2}}{\sum_{d=1}^{D}\exp\left(\boldsymbol{z}_{d}^{T}\boldsymbol{\alpha}\right)}
+$$
+
+## Estimación de parámetros 
+
+-   La estimación del coeficiente de parámetros de regresión está dada por la siguiente expresión:
+
+$$
+\hat{\boldsymbol{\alpha}}=\left(\sum_{d=1}^{D}\boldsymbol{z}_{d}\boldsymbol{z}_{d}^{T}\right)^{-1}\sum_{d=1}^{D}\boldsymbol{z}_{d}\log\left(\hat{\sigma}_{d}^{2}\right)
+$$
+
+-   Y el estimador suavizado de la varianza muestral está definido por:
+
+$$
+\hat{\tilde{\sigma}}_{d}^{2}=\exp\left(\boldsymbol{z}_{d}^{T}\hat{\boldsymbol{\alpha}}\right)\hat{\Delta}
+$$
+
+## Datos: Gran Encuesta Integrada de Hogares (GEIH) de Colombia. 
+
+La Gran Encuesta Integrada de Hogares (GEIH) del 2018 en Colombia, utilizó un diseño muestral complejo que incluyó la estratificación de la población en zonas urbanas y rurales, junto con un muestreo por conglomerados. La muestra seleccionada fue significativa, permitiendo la recolección de datos de manera representativa en todo el país. En total, se utilizaron 98,000 Unidades Primarias de Muestreo (UPM) para tener estadísticas confiables a Nivel Nacional, Regiones Geográficas, Ciudades principales y Áreas Urbanas/Rurales, Estratos Socioeconómicos.
+
+## Set de datos 
+
+```{r,echo=FALSE}
+tabla1 <- readRDS("www/01_FGV/01_tabla_encuesta.rds")
+tba(tabla1, cap = "GEIH Colombia")
+```
+
+## Diseño muestral 
+
+Para definir el diseño muestral a partir de una base de datos de encuesta se usan las librerías `survey` y `srvyr`.  
+
+```{r, eval=FALSE}
+library(survey)
+library(srvyr)
+options(survey.lonely.psu = "adjust")
+
+diseno <-
+  as_survey_design(
+    ids = upm,
+    weights = wkx,
+    strata = estrato,
+    nest = TRUE,
+    .data = encuesta
+  )
+```
+
+## Estimaciones directas por dominio 
+
+Para la estimación directa de la proporción se emplea la función `direct.supr`, disponible en el archivo [`0Source_FH.R`](https://github.com/psirusteam/2023COLsae/tree/main/Recursos/D%C3%ADa2/Sesion1/0Recursos). Está función realiza las estimaciones y criterios de calidad en una encuesta de muestreo complejo con diseño estratificado y por conglomerados.
+
+```{r, eval=FALSE}
+directodam2 <- direct.supr(design.base = diseno,
+                             variable = pobreza, 
+                             group = dam2,
+                             upm = upm,
+                             estrato = estrato)
+```
+
+## Dominios seleccionados 
+
+-   Mínimo 50 observaciones por dominio. 
+
+-   Efecto de diseño (Deff) mayor a 1.
+
+-   Mínimo 3 grados de libertad. 
+
+```{r,echo=FALSE}
+tabla2 <- readRDS("www/01_FGV/02_tabla.rds")
+tba(tabla2, cap = "Conteo de dominios seleccionados")
+```
+
+## FGV para la GEIH de Colombia 
+
+Para este proceso se realiza la transformación $\log(\hat{\sigma}^2_d)$ y la selección de las columnas identificador del municipio (`dam2`), la estimación directa  (`pobreza`), el número de personas en el dominio (`nd`) y la varianza estimada (`vardir`). 
+
+```{r, echo=FALSE}
+tabla3 <- readRDS("www/01_FGV/03_tabla_FGV.rds") %>% head(5)
+tba(tabla3, cap = "Set datos para la FGV")
+```
+
+
+## Analisis gráfico 
+
+```{r echo=FALSE, out.width = "400px", out.height="250px",fig.align='center', fig.cap= "Diagramas de dispersión"}
+include_graphics("www/01_FGV/04_fig_FGV.png")
+```
+
+## Modelo para la varianza
+
+El modelo definido para el conjunto de datos es el siguiente.
+
+$$
+\log(\hat{\sigma}^2) = \hat{\theta}_{dir} + n_{d}^2 + \sqrt{\hat{\theta}_{dir}}
+$$
+El resultado del modelo se muestra a continuación: 
+
+```{r, echo=FALSE}
+library(gtsummary)
+mod_fgv <- readRDS("www/01_FGV/05_tabla_modelo_FGV.rds")
+tbl_regression(mod_fgv) %>% 
+  add_glance_table(include = c(r.squared, adj.r.squared) ) %>% 
+  modify_caption("Resumen del modelo")
+```
+
+## Estimación para $\Delta$ y predicción. 
+
+Apartir de la estimación del modelo se debe obtener el  valor de la constante $\Delta$ para lo cual se usa el siguiente código. 
+
+```{r, eval=FALSE}
+delta.hat = sum(baseFGV$vardir) / 
+  sum(exp(fitted.values(FGV1)))
+```
+
+Por último se tiene la varianza suavizada. 
+
+```{r, eval=FALSE}
+hat.sigma <- 
+  data.frame(
+    dam2 = baseFGV$dam2,
+    hat_var = delta.hat * exp(fitted.values(FGV1)))
+```
+
+## Validación de resultados. 
+
+```{r echo=FALSE, out.width = "400px", out.height="250px",fig.align='center', fig.cap= "FGV y Varianza directa, por tamaño de muestra"}
+include_graphics("www/01_FGV/07_fig_FGV_vs_vardir2.png")
+```
 
 
 ## ¡Gracias!
