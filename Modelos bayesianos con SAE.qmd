@@ -994,7 +994,7 @@ knitr::include_graphics("www/03_FH_Arcsin/01_Fig_FH_Asin.png")
 knitr::include_graphics("www/03_FH_Arcsin/02_Fig_FH_Asin2.png")
 ```
 
-## Mapa de pobreza con tranformación Arcosin 
+## Mapa de pobreza con transformación Arcosin 
 
 ```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "Mapa de pobreza con transformación Arcosin"}
 knitr::include_graphics("www/03_FH_Arcsin/03_Fig_Mapa_arcoseno.PNG")
@@ -1027,7 +1027,7 @@ knitr::include_graphics("www/03_FH_Arcsin/04_Fig_Mapa_arcoseno_cv.PNG")
     - $\sigma^2_u \sim IG(0.0001, 0.0001)$.
 
 ## Modelo de área: Rutina en `STAN` 
-En este bloque de código vemos la tranformación que se realiza sobre los parámetros de entrada. 
+En este bloque de código vemos la transformación que se realiza sobre los parámetros de entrada. 
 
 ```
 transformed parameters{
@@ -1158,11 +1158,196 @@ knitr::include_graphics("www/04_FH_Beta_y_Binomial/03_Fig_Mapa_Beta.png")
 knitr::include_graphics("www/04_FH_Beta_y_Binomial/04_Fig_Mapa_Beta_cv.png")
 ```
 
+## Modelos de área con variable respuesta Binomial. 
+
+- El modelo de área de Fay-Herriot puede ser sustituido por un Modelo Mixto Lineal Generalizado (GLMM) cuando los datos observados son inherentemente discretos, como recuentos de personas u hogares con ciertas características.
+  
+- En un GLMM, se asume una distribución binomial para los datos $Y_d$ con probabilidad de éxito $\theta_d$ y un modelo logístico para $\theta_d$ con errores normales en la escala logit.
+
+## Ecuación del modelo  
+  
+El modelo se formula de la siguiente manera:
+
+  - $Y_d \mid \theta_d, n_d \sim Binomial(n_d, \theta_d)$
+  - $logit\left(\theta_{d}\right)=\log\left(\frac{\theta_{d}}{1-\theta_{d}}\right)  =  \boldsymbol{x}_{d}^{T}\boldsymbol{\beta}+u_{d}$
+
+donde $u_{d}\sim N\left(0,\sigma_{u}^{2}\right)$ y $n_{d}$ es el
+tamaño de la muestra para el área $d$.
+
+## Consideraciones para el modelo 
+
+Para muestras complejas, surgen dos problemas:
+
+  - Los valores de $Y_d$ no son enteros y se ven afectados por las ponderaciones de la encuesta.
+  - La varianza muestral en la distribución binomial no es precisa.
+
+## Propuesta de Carolina Franco. 
+
+- Se introduce un **tamaño de muestra efectivo** $\tilde{n}_d$ y un **número de muestra efectivo de éxitos** $\tilde{Y_d}$ para abordar estos problemas y mantener la estimación directa de la pobreza y su varianza correspondiente.
+
+- Dado lo anterior, es posible suponer que 
+$$
+\tilde{n}_{d}  \sim  \frac{\check{\theta}_{d}\left(1-\check{\theta}_{d}\right)}{\widehat{Var}\left(\hat{\theta}_{d}\right)}
+$$
+con $\check{\theta}_{d}$ es una preliminar predicción basada en el modelo para la proporción poblacional, $\hat{\theta}_i$ la estimación directa y $\widehat{Var}(\hat{\theta}_d)$ la estimación de la varianza de muestreo.
+
+- Luego, se asume que $\tilde{n}_{d}$ es proporcional a la varianza ajustada y que $\tilde{Y}_{d}=\tilde{n}_{d}\times\hat{\theta}_{d}$.
+
+## Distribuciones previas 
+
+- Se especifican las distribuciones previas para los parámetros $\boldsymbol{\beta}$ y $\sigma_{u}^{2}$:
+
+  - $\boldsymbol{\beta} \sim N(0,10000)$
+  - $\sigma_{u}^{2} \sim IG(0.0001,0.0001)$
 
 
+## Modelo de área: Rutina en `STAN` 
+
+En este bloque de código vemos la transformación que se realiza sobre los parámetros de entrada. 
+
+```
+transformed parameters {
+   vector[N1] LP;
+   vector[N1] theta;
+   real<lower=0> sigma_u;
+  
+   sigma_u = sqrt(sigma2_u); 
+   LP =  X * beta + u;
+   theta = inv_logit(LP);
+}
+
+```
+## Modelo de FH: Rutina en `STAN` 
+
+```
+model {
+  to_vector(beta) ~ normal(0, 10000);
+   u ~ normal(0, sigma_u);
+  sigma2_u ~ cauchy(0, 1000);
+  for(ii in 1:N1){
+  y_effect[ii] ~ binomial(n_effec[ii], theta[ii]);
+}
+  }
+
+generated quantities {
+  real ypred[N2];
+  vector[N2] thetaLP;
+  vector[N2] LP_pred;
+  LP_pred =  Xs * beta;
+  thetaLP = inv_logit(LP_pred);
+
+}
+  
+```
 
 
+## Procedimiento de estimación
 
+Lectura de la base de datos con las estimaciones directas.
+
+```{r, eval=FALSE}
+base_FH <-
+readRDS("www/04_FH_Beta_y_Binomial/base_FH_2018.rds") %>%
+  select(dam2, pobreza, n_eff_FGV)
+
+base_FH <- full_join(base_FH,
+             statelevel_predictors_df, by = "dam2")
+```
+**Las covariables son las mismas que se emplearon en los modelos anteriores.**  
+
+## Dividir el set de datos. 
+
+El proceso de estimación y predicción se hace por separado dentro de `STAN`
+
+-   Dominios observados.
+```{r, eval=FALSE}
+data_dir <- base_FH %>% filter(!is.na(T_pobreza))
+Xdat <- cbind(inter = 1,data_dir[,names_cov])
+```
+
+-   Dominios NO observados.
+```{r, eval=FALSE}
+data_syn <-
+  base_FH %>% anti_join(data_dir %>% select(dam2))
+Xs <-  cbind(inter = 1,data_syn[,names_cov])
+```
+
+##  Obteniendo parámetros adicionales. 
+
+-   Tamaño de muestra efectivo  $\tilde{n}_d$
+```{r, eval=FALSE}
+n_effec = round(data_dir$n_eff_FGV)
+```
+
+-   Número de muestra efectivo de éxitos $\tilde{Y_d}$
+```{r, eval=FALSE}
+y_effect  = round((data_dir$pobreza)*n_effec)
+```
+
+
+## Lista de parámetros para `STAN`
+
+
+```{r, eval=FALSE}
+sample_data <- list(
+  N1 = nrow(Xdat),   # Observados.
+  N2 = nrow(Xs),   # NO Observados.
+  p  = ncol(Xdat),       # Número de regresores.
+  X  = as.matrix(Xdat),  # Covariables Observados.
+  Xs = as.matrix(Xs),    # Covariables NO Observados
+  n_effec = n_effec,
+  y_effect  = y_effect  # Estimación directa. 
+)
+```
+
+## Compilando el modelo en `STAN`
+  
+```{r, eval=FALSE}
+fit_FH_binomial <-
+  "www/04_FH_Beta_y_Binomial/14FH_binomial.stan"
+
+model_FH_Binomial <- stan(
+  file = fit_FH_binomial,  
+  data = sample_data,   
+  verbose = FALSE,
+  warmup = 500,         
+  iter = 1000,            
+  cores = 4              
+)
+
+saveRDS(model_FH_Binomial,
+file = "www/04_FH_Beta_y_Binomial/model_FH_Binomial.rds")
+```
+
+
+## Resultados del modelo para los dominios observados. 
+
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "PPC modelo de área Binomial"}
+knitr::include_graphics("www/04_FH_Beta_y_Binomial/05_Fig_pcc_Bin.PNG")
+```
+
+## Análisis gráfico de la convergencia de las cadenas de $\sigma^2_u$. 
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "Recorrido de las cadenas"}
+knitr::include_graphics("www/04_FH_Beta_y_Binomial/06_Fig_Sigma_Bin.PNG")
+```
+
+## Mapa de pobreza con modelo de área de respuesta binomial 
+
+```{r echo=FALSE, out.width = "500px", out.height="250px", fig.cap= "Mapa de pobreza con el modelo de área de respuesta beta."}
+knitr::include_graphics("www/04_FH_Beta_y_Binomial/07_Fig_Mapa_Bin.PNG")
+```
+
+## Mapa de los coeficientes de variación para la pobreza
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "Mapa de los coeficientes de variación"}
+knitr::include_graphics("www/04_FH_Beta_y_Binomial/08_Fig_Mapa_Bin_cv.PNG")
+```
+
+# Modelos de unidad.
+
+## Modelo de unidad para la estimación del ingreso medio
 
 
 ## ¡Gracias!
