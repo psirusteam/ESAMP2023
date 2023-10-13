@@ -829,6 +829,341 @@ knitr::include_graphics("www/02_FH_Nornal/11_Mapa_pobreza.PNG")
 ```
 
 
+## Modelo de área: Transformación Arcoseno. 
+
+-   En el modelo de Fay-Herriot, la combinación lineal de covariables puede generar valores que no están dentro del rango aceptable para una proporción.
+
+   - Para abordar esto, se aplica una transformación arcoseno a los estimadores: $\hat{z}_d = arcsin\left( \sqrt{ \hat{\theta}_d} \right)$.
+
+## Varianza de la Transformación Arcoseno
+
+   - La varianza de la transformación arcoseno está relacionada con el factor de corrección DEFF y el tamaño de muestra efectivo:
+
+$$Var\left( \hat{z}_d \right) = \frac{\widehat{DEFF}_d}{4\times n_d} = \frac{1}{4\times n_{d,efectivo} }$$.
+
+## Especificación del Modelo de Fay-Herriot
+
+   - El modelo de Fay-Herriot se define con una variable latente $Z_d$ que sigue una distribución normal.
+   - La media de $Z_d$ ($\mu_d$) se relaciona con las covariables a través de $\boldsymbol{x}^{T}_{d}\boldsymbol{\beta} + u_d$.
+
+   - La relación entre la variable latente $\theta_d$ y el estimador directo se establece como $\theta_d =  \left(sin(\mu_d)\right)^2$.
+
+Lo anterior se simplifica como:
+
+1. $Z_d \mid \mu_d,\sigma^2_d   \sim   N(\mu_d, \sigma^2_d)$
+2. $\mu_d  =  \boldsymbol{x}^{T}_{d}\boldsymbol{\beta} + u_d$
+3. $\theta_d  =   \left(sin(\mu_d)\right)^2$
+
+
+## Distribuciones Previas
+
+Se especifican distribuciones previas para los parámetros del modelo:
+     - $\boldsymbol{\beta} \sim N\left(0,1000 \right)$
+     - $\sigma_{u}^{2} \sim IG\left(0.0001,0.0001\right)$.
+
+## Modelo de área: Rutina en `STAN` 
+
+El código es similar al anterior, aquí se muestran las variaciones 
+```
+transformed parameters{
+  vector[N1] theta;
+  vector[N1] lp;
+  real<lower=0> sigma_u;
+  lp = X * beta + u;
+  sigma_u = sqrt(sigma2_u);
+  for(k in 1:N1){
+    theta[k] = pow(sin(lp[k]), 2);
+  }
+}
+```
+## Modelo de FH: Rutina en `STAN` 
+
+```
+
+model {
+  // likelihood
+  y ~ normal(lp, sigma_e); 
+  // priors
+  beta ~ normal(0, 100);
+  u ~ normal(0, sigma_u);
+  sigma2_u ~ inv_gamma(0.0001, 0.0001);
+}
+
+```
+
+
+## Procedimiento de estimación
+
+Para la base preparada previamente hay que seleccionar y transformar las columnas de interés. 
+
+```{r, eval=FALSE}
+statelevel_predictors_df <- 
+  readRDS("www/03_FH_Arcsin/statelevel_predictors.rds")
+base_FH <- 
+  readRDS("www/03_FH_Arcsin/base_FH_2018.rds") %>% 
+  transmute(
+    dam2,        ## id dominios
+    pobreza,
+    T_pobreza = asin(sqrt(pobreza)),  ## creando zd
+    n_effec = n_eff_FGV,      ## n efectivo
+    varhat = 1/(4*n_effec)    ## varianza para zd
+    )
+base_FH <- full_join(base_FH, 
+           statelevel_predictors_df, by = "dam2" )
+```
+
+## Preparando los insumos para `STAN`
+
+Selección de las covariables, que corresponden a las seleccionadas previamente. 
+
+```{r, eval=FALSE} 
+names_cov <- c(
+  "sexo2" , "anoest2" , "anoest3",   "anoest4",
+  "edad2" , "edad3" , "edad4" , "edad5" , "etnia1",
+  "etnia2" ,  "tasa_desocupacion" , "luces_nocturnas" ,
+  "cubrimiento_cultivo" , "alfabeta"
+)
+```
+
+## Dividir el set de datos. 
+
+El proceso de estimación y predicción se hace por separado dentro de `STAN`
+
+-   Dominios observados.
+```{r, eval=FALSE}
+data_dir <- base_FH %>% filter(!is.na(T_pobreza))
+Xdat <- cbind(inter = 1,data_dir[,names_cov])
+```
+
+-   Dominios NO observados.
+```{r, eval=FALSE}
+data_syn <-
+  base_FH %>% anti_join(data_dir %>% select(dam2))
+Xs <-  cbind(inter = 1,data_syn[,names_cov])
+```
+
+## Lista de parámetros para `STAN`
+
+El motor de procesamiento de `STAN` se basa en `C++`, por lo que hace necesario que los argumentos para ejecutar los códigos ingresen en forma de lista. 
+
+```{r, eval=FALSE}
+sample_data <- list(
+  N1 = nrow(Xdat),       # Observados.
+  N2 = nrow(Xs),         # NO Observados.
+  p  = ncol(Xdat),       # Número de regresores.
+  X  = as.matrix(Xdat),  # Covariables Observados.
+  Xs = as.matrix(Xs),    # Covariables NO Observados
+  y  = as.numeric(data_dir$T_pobreza),
+  sigma_e = sqrt(data_dir$varhat)
+)
+```
+
+## Compilando el modelo en `STAN`
+  
+```{r, eval=FALSE}
+
+fit_FH_arcoseno <- 
+  "www/03_FH_Arcsin/15FH_arcsin_normal.stan"
+
+model_FH_arcoseno <- stan(
+  file = fit_FH_arcoseno,  
+  data = sample_data,   
+  verbose = FALSE,
+  warmup = 500,         
+  iter = 1000,            
+  cores = 4              
+)
+saveRDS(model_FH_arcoseno,
+        "www/03_FH_Arcsin/model_FH_arcoseno.rds")
+
+```
+
+
+## Resultados del modelo para los dominios observados. 
+
+De forma similar al modelo de Fay Herrior se realiza el gráfico con el chequeo predictivo posterior. 
+
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "PPC Arcosin"}
+knitr::include_graphics("www/03_FH_Arcsin/01_Fig_FH_Asin.png")
+```
+
+## Análisis gráfico de la convergencia de las cadenas de $\sigma^2_u$. 
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "Recorrido de las cadenas"}
+knitr::include_graphics("www/03_FH_Arcsin/02_Fig_FH_Asin2.png")
+```
+
+## Mapa de pobreza con tranformación Arcosin 
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "Mapa de pobreza con transformación Arcosin"}
+knitr::include_graphics("www/03_FH_Arcsin/03_Fig_Mapa_arcoseno.PNG")
+```
+
+## Mapa de los coeficientes de variación para la pobreza
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "Mapa de los coeficientes de variación"}
+knitr::include_graphics("www/03_FH_Arcsin/04_Fig_Mapa_arcoseno_cv.PNG")
+```
+
+## Modelos de área con variable respuesta Beta.
+
+- El modelo beta-logístico se introdujo inicialmente en el contexto de un enfoque de Estimación de Mejor Predicción (EBP) por Jiang y Lahiri en 2006. Fue utilizado para estimar medias de dominio en poblaciones finitas.
+
+- El modelo área beta-logístico se define a través de la siguiente expresión:
+    - $\hat{p}_{d} \mid P_d \sim beta(a_d, b_d)$.
+
+  - La función de enlace se relaciona con los parámetros del modelo:
+    - $logit(P_{d}) \mid \boldsymbol{\beta}, \sigma^2_u  \sim  N(\boldsymbol{x}_d^T\boldsymbol{\beta},\sigma^2_u)$.
+
+## Estimación de Parámetros
+  - Los parámetros $a_d$ y $b_d$ se estiman de la siguiente manera:
+    - $a_d = P_d \times \phi_d$
+    - $b_d = (1 - P_d) \times \phi_d$
+  - Donde $\phi_d = \frac{n_d}{\widehat{DEFF}_d} -1 = n_{d,efectivo} -1$.
+
+- Se especifican distribuciones previas para los parámetros del modelo:
+    - $\beta_k \sim N(0, 10000)$
+    - $\sigma^2_u \sim IG(0.0001, 0.0001)$.
+
+## Modelo de área: Rutina en `STAN` 
+En este bloque de código vemos la tranformación que se realiza sobre los parámetros de entrada. 
+
+```
+transformed parameters{
+  vector[N1] LP;
+  real<lower=0> sigma_u;
+  vector[N1] theta;           
+  LP = X * beta + u;
+  sigma_u = sqrt(sigma2_u); 
+  for (i in 1:N1) { 
+    theta[i] = inv_logit(LP[i]); 
+  }
+}
+
+```
+## Modelo de FH: Rutina en `STAN` 
+
+```
+model {
+  // model calculations
+  vector[N1] a;                       
+  vector[N1] b;                       
+
+  for (i in 1:N1) { 
+    a[i] = theta[i] * phi[i];
+    b[i] = (1 - theta[i]) * phi[i];
+  }
+
+  // priors
+  beta ~ normal(0, 100);
+  u ~ normal(0, sigma_u);
+  sigma2_u ~ inv_gamma(0.0001, 0.0001);
+
+  // likelihood
+  y ~ beta(a, b);
+}
+```
+
+
+## Procedimiento de estimación
+
+En forma similar a los modelos anteriores hacemos uso de la base previamente preparada
+
+```{r, eval=FALSE}
+base_FH <-
+readRDS("www/04_FH_Beta_y_Binomial/base_FH_2018.rds") %>%
+  select(dam2, pobreza, n_eff_FGV)
+
+base_FH <- full_join(base_FH,
+             statelevel_predictors_df, by = "dam2")
+```
+Las covariables son las mismas que se emplearon en los modelos anteriores.  
+
+## Dividir el set de datos. 
+
+El proceso de estimación y predicción se hace por separado dentro de `STAN`
+
+-   Dominios observados.
+```{r, eval=FALSE}
+data_dir <- base_FH %>% filter(!is.na(T_pobreza))
+Xdat <- cbind(inter = 1,data_dir[,names_cov])
+```
+
+-   Dominios NO observados.
+```{r, eval=FALSE}
+data_syn <-
+  base_FH %>% anti_join(data_dir %>% select(dam2))
+Xs <-  cbind(inter = 1,data_syn[,names_cov])
+```
+
+## Lista de parámetros para `STAN`
+
+
+```{r, eval=FALSE}
+sample_data <- list(
+  N1 = nrow(Xdat),   # Observados.
+  N2 = nrow(Xs),   # NO Observados.
+  p  = ncol(Xdat),       # Número de regresores.
+  X  = as.matrix(Xdat),  # Covariables Observados.
+  Xs = as.matrix(Xs),    # Covariables NO Observados
+  y  = as.numeric(data_dir$pobreza),
+  phi = data_dir$n_eff_FGV - 1 
+)
+```
+
+## Compilando el modelo en `STAN`
+  
+```{r, eval=FALSE}
+
+fit_FH_beta_logitic <-
+  "www/04_FH_Beta_y_Binomial/16FH_beta_logitc.stan"
+
+model_FH_beta_logitic <- stan(
+  file = fit_FH_beta_logitic,  
+  data = sample_data,   
+  verbose = FALSE,
+  warmup = 500,         
+  iter = 1000,            
+  cores = 4              
+)
+saveRDS(model_FH_beta_logitic, 
+file = "www/04_FH_Beta_y_Binomial/model_FH_beta.rds")
+
+```
+
+
+## Resultados del modelo para los dominios observados. 
+
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "PPC modelo de área Beta"}
+knitr::include_graphics("www/04_FH_Beta_y_Binomial/01_Fig_ppc.png")
+```
+
+## Análisis gráfico de la convergencia de las cadenas de $\sigma^2_u$. 
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "Recorrido de las cadenas"}
+knitr::include_graphics("www/04_FH_Beta_y_Binomial/02_Fig_sigma.png")
+```
+
+## Mapa de pobreza con modelo de área de respuesta beta. 
+
+```{r echo=FALSE, out.width = "500px", out.height="250px", fig.cap= "Mapa de pobreza con el modelo de área de respuesta beta."}
+knitr::include_graphics("www/04_FH_Beta_y_Binomial/03_Fig_Mapa_Beta.png")
+```
+
+## Mapa de los coeficientes de variación para la pobreza
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "Mapa de los coeficientes de variación"}
+knitr::include_graphics("www/04_FH_Beta_y_Binomial/04_Fig_Mapa_Beta_cv.png")
+```
+
+
+
+
+
+
+
 
 ## ¡Gracias!
 
