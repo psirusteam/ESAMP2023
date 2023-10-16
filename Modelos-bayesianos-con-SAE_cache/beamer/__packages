@@ -14,7 +14,7 @@ purrr
 tidyr
 knitr
 kableExtra
-gtsummary
 bayesplot
 posterior
 patchwork
+gtsummary
