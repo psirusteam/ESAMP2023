@@ -794,7 +794,7 @@ estimacionesBench <- estimacionesPre %>%
 ```{r, echo=FALSE}
  estimacionesBench <- 
   readRDS("www/02_FH_Nornal/09_tabla_estimacionesBench.rds")
-tba(estimacionesBench %>% slice(1:5))
+tba(estimacionesBench %>% slice(1:3))
 ```
 
 # Validación de los resultados. 
@@ -1452,7 +1452,7 @@ La base original se recodifica como sigue:
   - 4 → 45 - 64
   - 5 → 65 - más
 
-- Zona urbana/rural (**area**) se recodifica como:
+- Zona urbana/rural (**área**) se recodifica como:
   - 0 → Rural
   - 1 → Urbana
 - $logingreso = \log(ingreso)$
@@ -1483,7 +1483,7 @@ knitr::include_graphics("www/05_Mod_Ingreso/02_Fig_densidad_ing.png")
 El resultado de agregar la base de dato se muestra a continuación:
 
 ```{r, eval=FALSE}
-byAgrega <- c("dam", "dam2",  "area", "sexo",
+byAgrega <- c("dam", "dam2",  "área", "sexo",
               "anoest", "edad",   "etnia")
 
 encuesta_df_agg <-
@@ -1536,7 +1536,7 @@ library(posterior)
 library(bayesplot)
 p1 <-
   (mcmc_dens_chains(fit, pars = "sigma") +
-     mcmc_areas(fit, pars = "sigma")) /
+     mcmc_áreas(fit, pars = "sigma")) /
   mcmc_trace(fit, pars = "sigma")
 ggsave(p1,
   plot = "www/05_Mod_Ingreso/04_Fig_sigma_ing.png" )
@@ -1600,7 +1600,7 @@ epred_mat <- posterior_epred(
 Escribir la estimación del ingreso medio en términos de lineas de pobreza. 
 
 ```{r,eval=FALSE}
-lp <- encuesta_mrp %>% distinct(area,lp,li))
+lp <- encuesta_mrp %>% distinct(área,lp,li))
 ```
 
 
@@ -1611,7 +1611,7 @@ tba(tabla_lp, "Líneas de pobreza")
 ```
 
 ```{r, eval=FALSE}
-lp <- inner_join(poststrat_df,lp,by = "area") %>% 
+lp <- inner_join(poststrat_df,lp,by = "área") %>% 
   select(lp)
 
 epred_mat <- (exp(epred_mat)-1)/lp$lp
@@ -2035,6 +2035,782 @@ $$
 - Así, se obtiene el estimador de $P$ para cada dominio $d$.
 
 
+# Estimación de $\theta^{k}_{di}$
+
+La estimación de $\theta^{k}_{di}$ refleja la probabilidad de que una unidad específica $i$ en el dominio $d$ obtenga el valor 1 en la dimensión $k$. Para llevar a cabo esta estimación, seguimos el siguiente procedimiento:
+
+$$
+\bar{Y}^{k}_d = \theta^{k}_d = \frac{1}{N_d} \sum_{i=1}^{N_d} y^{k}_{di}
+$$
+
+Aquí, $y^{k}_{di}$ puede tomar los valores 0 ó 1, representando la ausencia (o no) de una característica específica. 
+
+# Estimación de $\theta^{k}_{di}$
+
+Dividir la suma en dos partes: $s_d$, que representa las unidades observadas en una muestra, y $s_d^c$, que son las unidades no observados. Por lo tanto,
+
+$$
+\bar{Y}^{k}_d = \theta^{k}_d =  \frac{1}{N_d}\left(\sum_{s_d}y^{k}_{di} + \sum_{s^c_d}y^{k}_{di} \right) 
+$$
+
+# Estimación de $\theta^{k}_{di}$
+
+Mediante un modelo de unidad es posible realizar la predicción de  $y^{k}_{di}$ para las unidades no observadas. De esta manera, el estimador de $\theta^{k}_d$ se expresa como:
+
+$$
+\hat{\theta}^{k}_d = \frac{1}{N_d}\left( \sum_{s_d}y^{k}_{di} + \sum_{s^c_d}\hat{y}^{k}_{di} \right)
+$$
+
+Donde,
+
+$$\hat{y}^{k}_{di}=E_{\mathscr{M}}\left(y^{k}_{di}\mid\boldsymbol{x}_{d},\boldsymbol{\beta}\right)$$
+
+# Estimación de $\theta^{k}_{di}$
+
+La estimación $\hat{\theta}^{k}_d$ se simplifica a:
+
+$$
+\hat{\theta}^{k}_d = \frac{1}{N_d}\sum_{i=1}^{N_d}\hat{y}^{k}_{di}
+$$
+
+Este enfoque permite estimar la probabilidad $\theta^{k}_d$ en el dominio $d$ en la dimensión $k$ utilizando predicciones y datos disponibles en lugar de contar con información individual detallada para todos los casos.
+
+# Predicción de los "Hard Estimates
+
+- Hobza y Morales (2016) definen los "hard estimates" como valores binarios (0 o 1) que indican de manera precisa si un individuo tiene o no una característica específica en relación con cada indicador de privación multidimensional.
+
+- La estimación de $\theta^{k}_{di}$ refleja la probabilidad de que una unidad específica $i$ en el dominio $d$ obtenga el valor 1 en la dimensión $k$.
+
+- Por lo tanto, se define $\hat{y}^{k}_{di} \sim Bernoulli(\hat{\pi}^{k}_{di})$, donde $\hat{y}^{k}_{di}$ son las estimaciones "hard".
+
+# Estimación Puntual del IPM
+
+El procedimiento propuesto para estimar el IPM es el siguiente:
+
+  1. Utilice los datos de la muestra para ajustar un modelo logit Bernoulli a nivel de unidad para cada indicador. Esto se logra mediante el uso del algoritmo de Markov Chain Monte Carlo (MCMC) con $L$ iteraciones.
+
+  2. Para cada dimensión $k$ a la cual se estimo un modelo logit Bernoulli a nivel de unidad con $L$ iteraciones, realice la predicción de los valores $\hat{y}^{k}_{di}$ para cada individuo en el censo. Esto generará $L$ realizaciones aleatorias de $\hat{y}^{k}_{di}$.
+
+  3. Denotemos como $\hat{y}_{di}^{kl}$ a la $l$-ésima realización aleatoria de la dimensión $k$ para el individuo $i$ en el dominio $d$. Calculamos $q_{di}^{l} = \sum_{k=1}^{K} w_k \cdot y_{di}^{kl}$. 
+
+
+# Estimación Puntual del IPM
+
+Aparir de los valores calculados para $q_{di}$ se puede calcular $H_d^{l}$,  $A_d^{l}$ y $IPM_{d}^{l}$ utilizando las ecuaciones:
+
+$$
+IPM_{d}^{l} = \frac{1}{N_d}\sum_{i=1}^{N_{d}}c_{di}^{l}\left(z\right)
+$$
+
+$$
+H_d^{l}=\frac{1}{N_{d}}\sum_{i=1}^{N_{d}}I\left(q_{di}^{l}\ge z\right)=\frac{N_{d}^{l}\left(z\right)}{N_{d}}
+$$
+
+y
+
+$$ 
+A_{d}^{l}=\sum_{i=1}^{N_{d}}\frac{c_{di}^{l}\left(z\right)}{N^{l}_{d}\left(z\right)}
+$$
+
+# Estimación Puntual del IPM
+
+   4. La estimación puntual de $H_d$,  $A_{d}$ y $IPM_{d}$ en cada área pequeña $d$ se calcula tomando el promedio sobre las $L$ iteraciones: 
+    
+$$
+    \hat{H}_d = \frac{1}{L}\sum_{l=1}^{L}H_d^l, 
+$$
+    
+$$
+        \hat{A}_d = \frac{1}{L}\sum_{l=1}^{L}A_d^l 
+$$
+  y  
+$$
+        \widehat{IPM}_d = \frac{1}{L}\sum_{l=1}^{L}IPM_d^l 
+$$
+
+# Estimación de la varianza para el IPM
+
+  5. Dada que el modelo se estimó usando el algoritmo MCMC, es posible tener la estimación del error de estimación, de esta forma: 
+  
+$$
+  \widehat{Var}(\hat{H}_d) = \frac{1}{L}\sum_{l=1}^{L}\left( H^{l}_{d} -\hat{H}_d \right)^2,
+$$
+  
+$$
+  \widehat{Var}(\hat{A}_d) = \frac{1}{L}\sum_{l=1}^{L}\left( A^{l}_{d} -\hat{A}_d \right)^2
+$$ 
+y
+
+$$
+  \widehat{Var}(\widehat{IPM}_d) = \frac{1}{L}\sum_{l=1}^{L}\left( IPM_d^{l} -\widehat{IPM}_d \right)^2
+$$
+
+
+# Índice de Privación Multidimensional en Colombia. 
+
+En Colombia se tiene $K = 9$ indicadores que se miden como privaciones: $y_{di}^{k} = 1$ si la persona tiene la privación y $y_{di}^{k} = 0$ si la persona no ha tenido la privación.
+
+El índice requiere información para cada individuo $i = 1, \ldots, N_d$ en los dominios $d = 1, \ldots, D$, donde $N_d$ denota el tamaño de la población del dominio $d$.
+
+Para este estudio, utilizamos el valor de 0.4 para $z$, es decir, $I(\cdot)$ es igual a 1 cuando $q_{di} \ge 0.4$. El valor de $q_{di}$ el dominio $d$ se calcula como:
+
+  
+$$
+  q_{di} = \frac{1}{16}(y_{di}^{1} + y_{di}^{2} + y_{di}^{3} + y_{di}^{4}) + \frac{1}{12}(y_{di}^{5} + y_{di}^{6} + y_{di}^{7}) + \frac{1}{4}(y_{di}^{8} + y_{di}^{9}) 
+$$
+
+
+# Privaciones calculadas para Colombia. 
+
+
+  a. $y_{di}^{1}$ = Privación en material de construcción de la vivienda
+
+  b. $y_{di}^{2}$ = Hacinamiento en el hogar. 
+
+  c. $y_{di}^{3}$ = Acceso al servicio de Internet.
+
+  d. $y_{di}^{4}$ = Acceso al servicio energía eléctrica. 
+
+  e. $y_{di}^{5}$ = Privación en saneamiento.
+
+  f. $y_{di}^{6}$ = Privación de acceso al agua potable. 
+  
+  g. $y_{di}^{7}$ = Privación en salud. 
+
+  h. $y_{di}^{8}$ = Privación de la educación. 
+
+  i. $y_{di}^{9}$ = Privación del empleo y la protección social.  
+
+
+# Dimensiones de las privaciones. 
+
+Las privaciones anteriores se agrupan por dimensiones así: 
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "Dimensiones y pesos del IPM"}
+knitr::include_graphics("www/07_Mod_IPM/01_CEPAL_IPM.png")
+```
+
+
+# Encuesta de hogares con indicadoreas de las privaciones. 
+
+En la siguiente tabla observan una muestra de las $y_{di}^k$ para Colombia. 
+
+```{r, eval=TRUE, echo=FALSE}
+readRDS("www/07_Mod_IPM/02_tablas_nbi.rds") %>% 
+  tba(cap = "Índices de provaciones en Colombia")
+```
+
+# Proceso para agrupar la encuestas. 
+
+Lectura de la encuesta y definición de variables para agrupar
+
+```{r,eval=FALSE}
+encuesta_ipm <- 
+  readRDS("www/07_Mod_IPM/encuesta_nbi.rds")
+
+byAgrega <- c("dam", "dam2", "área", "sexo",
+              "etnia", "anoest",  "edad")
+
+names_ipm <- grep(pattern = "nbi",
+                  names(encuesta_ipm), value = TRUE)
+```
+
+# Proceso para agrupar la encuestas. 
+El proceso se repite para cada una de las privaciones, por tanto se automatiza de la siguiente forma: 
+
+```{r, eval=FALSE}
+encuesta_df <- map(
+  setNames(names_ipm, names_ipm),
+   function(y) {
+    encuesta_ipm$temp <- as.numeric(encuesta_ipm[[y]])
+    encuesta_ipm %>%
+    group_by_at(all_of(byAgrega)) %>%
+     summarise( n = n(), yno = sum(temp),
+     ysi = n - yno, .groups = "drop"
+    ) %>%
+  inner_join(statelevel_predictors_df,
+  by = c("dam", "dam2"))
+})
+saveRDS(encuesta_df,
+        "www/07_Mod_IPM/03_tabla_encuesta_agg.rds")
+```
+
+# Muestra de las bases 
+La base resultante quedan de la siguiente forma:
+
+```{r, echo=FALSE}
+tabla_agg_ipm <-
+  readRDS("www/07_Mod_IPM/03_tabla_encuesta_agg.rds")[["nbi_matviv_ee"]] %>%
+  head(10) %>% select(2:6, 8:12)
+tba(tabla_agg_ipm,
+    cap = "Privaci\'on en material de construcci\'on de la vivienda")
+```
+
+
+# Definir el modelo 
+
+```{r, eval=FALSE}
+names_cov <-  statelevel_predictors_df %>%
+  dplyr::select(-dam,-dam2) %>% names()
+names_cov <- c("sexo","área",names_cov[16:19])
+efec_aleat <-
+  paste0("(1|",  c("dam", "etnia"), ")",
+         collapse = "+")
+formula_mod <-  formula(paste(
+    " cbind(yno, ysi) ~", efec_aleat,
+    "+",  paste0(names_cov,
+           collapse = " + ")
+  ))
+
+formula_mod
+```
+```
+cbind(yno, ysi) ~ (1 | dam) + (1 | etnia) +
+sexo + área + tasa_desocupacion + 
+luces_nocturnas + cubrimiento_cultivo + 
+cubrimiento_urbano
+```
+
+# Ejecutando los modelos 
+
+```{r, eval = FALSE}
+plan(multisession, workers = 4)
+
+fit <- future_map(encuesta_df, function(xdat){
+stan_glmer(formula = formula_mod ,
+  family = binomial(link = "logit"),
+  data = xdat,
+  cores = 4,
+  chains = 4,
+  iter = 500
+)}, 
+.progress = TRUE)
+
+saveRDS(object = fit, "Data/fits_IPM.rds")
+
+```
+
+
+# Proceso para la predicción $\theta_{di}^{kl}$
+
+-   Los modelos fueron compilados de manera separada, por tanto, disponemos de un objeto `.rds` por cada privación que componen el IPM. 
+
+-   El proceso se ilustra el proceso para la privación en agua, pero es igual para las restantes privaciones. 
+
+- La predicción de los modelos se hace sobre la base del censo. 
+
+# Predicción en el censo 
+
+
+```{r, eval=FALSE}
+censo_ipm <- readRDS("www/07_Mod_IPM/04_tabla_censo.rds") 
+fit_agua <-
+  readRDS(file = "www/07_Mod_IPM/Modelos/fit_agua.rds")
+
+epred_mat_agua <- posterior_epred(
+  fit_agua,
+  newdata = poststrat_df,
+  type = "response",
+  allow.new.levels = TRUE
+)
+```
+
+# Definiendo los hard estimates
+
+
+```{r,eval=FALSE}
+epred_mat_agua_dummy <-
+  rbinom(
+    n = nrow(epred_mat_agua) * ncol(epred_mat_agua) , 1,
+         epred_mat_agua)
+
+epred_mat_agua_dummy <- matrix(
+  epred_mat_agua_dummy,
+  nrow = nrow(epred_mat_agua),
+  ncol = ncol(epred_mat_agua)
+)
+saveRDS(epred_mat_agua_dummy,
+        "www/07_Mod_IPM/Dummys/epred_mat_agua_dummy.rds")
+```
+
+# Calculando $q_{di}^{l}$
+
+El calculo de $q^{l}_{id}$ es una simple operación matricial. 
+
+```{r, eval=FALSE}
+chain_q  <-
+  # Vivienda y servicios
+  (1 / 16) * (
+    epred_mat_material_dummy +
+      epred_mat_hacinamiento_dummy +
+      epred_mat_energia_dummy +
+      epred_mat_tic_dummy
+  ) +
+  # Salud
+  (1 / 12) * (epred_mat_agua_dummy +
+                epred_mat_saneamiento_dummy +
+                epred_mat_salud_dummy) +
+  # Educación
+  (1 / 4) * epred_mat_educacion_dummy  +
+  # Empleo
+  (1 / 4) * epred_mat_empleo_dummy
+```
+
+# Calculando $I\left( q_{di}^{l} \ge z \right)$ y $c_{di}^{l}\left(z\right)$
+
+```{r,echo=FALSE}
+chain_q <- readRDS("www/07_Mod_IPM/chain_q.rds")
+```
+
+Ahora, es posible tener el calculo de $I\left( q_{di}^{l} \ge z \right)$, tomando como umbral $z=0.4$. 
+
+```{r, eval=FALSE}
+chain_Ind <- chain_q
+chain_Ind[chain_Ind < 0.4] <- 0
+chain_Ind[chain_Ind != 0] <- 1
+```
+
+seguidamente calculamos $c_{di}^{l}\left(z\right)$ 
+
+```{r, eval=FALSE}
+chain_ci <- matrix(0,nrow = nrow(chain_q),
+                   ncol = ncol(chain_q))
+chain_ci[chain_Ind == 1] <- chain_q[chain_Ind == 1]
+
+```
+
+# Resltados obtenidos en las primeras iteraciones
+
+```{r, echo=FALSE}
+datos_iter <- readRDS("www/07_Mod_IPM/05_tabla_l_iter.rds")
+tba(datos_iter[,-c(3,6,9)], cap =  "Cadenas obtenidas")
+```
+
+# Estimaciones desagregadas del IPM
+
+Para realizar las estimaciones desagregadas se desarrollo una función que facilita el calculo, por ejemplo, división administrativa (*dam2*)
+
+```{r, eval=FALSE}
+source("www/07_Mod_IPM/06_Estimar_ipm.R")
+ipm_dam2 <- estime_IPM(
+  poststrat = censo_ipm,
+  chain_ci = chain_ci,
+  chain_ind = chain_ind,
+  byMap = "dam2"
+) %>% data.frame()
+```
+
+# Estimaciones desagregadas del IPM
+
+```{r, echo=FALSE}
+ipm_dam2 <- readRDS("www/07_Mod_IPM/09_tabla_dam2.rds") %>% 
+  head(10)
+tba(ipm_dam2, "Estimaciones por división administrativa")
+```
+
+# Estimaciones por privación del IPM
+  - Es fundamental analizar cada dimensión individualmente.
+  - Esto permite comprender la complejidad de la pobreza y diseñar estrategias efectivas.
+  - Se utilizan "hard estimates" para calcular las estimaciones en cada privación.
+  - El proceso se aplica de manera similar a todas las privaciones
+
+# Proceso de estimación
+
+Para agilizar el proceso de calculo se define crea la función **agregado_dim_ipm** que hace los cálculos. La forma de uso es la siguiente. 
+
+```{r,eval=FALSE}
+source("www/07_Mod_IPM/07_Fun_agregado.r")
+
+epred_mat_agua_dummy <- 
+readRDS("www/07_Mod_IPM/Dummys/epred_mat_agua_dummy.rds")
+
+datos_dam_agua <- 
+  agregado_dim_ipm(poststrat = censo_ipm,
+           epredmat = epred_mat_agua_dummy,
+           byMap = "dam2")
+```
+
+# Estimación por división administrativa
+```{r, echo=FALSE}
+datos_dam2_agua <- 
+  readRDS("www/07_Mod_IPM/10_tabla_dam2_agua.rds") %>% 
+  head(10)
+tba(datos_dam2_agua,
+    cap = "Estimación por dam2 de la privación de agua")
+```
+
+# Resultado para todas las privaciones. 
+\small
+```{r, echo=FALSE}
+tabla_dam2 <- readRDS("www/07_Mod_IPM/11_tabla_estimate_dam2.rds")
+temp <- spread(tabla_dam2 %>% select(-estimate_se),
+       key = "Indicador",value = "estimate") %>% 
+  head(10) %>% select(-c(6,8:10))
+tba(temp, cap = "Estimacion puntual por municipio y dimension")
+```
+# Resultado para todas las privaciones. 
+\small
+```{r, echo=FALSE}
+temp <- spread(tabla_dam2 %>% select(-estimate),
+       key = "Indicador",value = "estimate_se") %>% 
+  rename_if(is.numeric, .funs = function(x)paste0(x,"_se")) %>% 
+  head(10)%>% select(-c(6,8:10))
+tba(temp, cap = "Error de estimacion por municipio y dimension")
+
+```
+
+# Mapa de los componentes del IPM
+
+```{r echo=FALSE, out.width = "400px", out.height="350px", fig.cap= "Componentes del IPM"}
+knitr::include_graphics("www/07_Mod_IPM/12_Fig_mapa_COL_ipm.jpeg")
+```
+
+# Mapa de los privaciones que componen el IPM
+
+```{r echo=FALSE, out.width = "450px", out.height="650px", fig.cap= "Privaciones del IPM"}
+knitr::include_graphics("www/07_Mod_IPM/13_Fig_mapa_privacion.jpeg")
+```
+
+# Modelo de área para estadísticas del mercado de trabajo
+
+# Definición del modelo multinomial
+
+-   Sea $K$ el número de categorías de la variable de interés $Y\sim multinimial\left(\boldsymbol{\theta}\right)$, con $\boldsymbol{\theta}=\left(p_{1},p_{2},\dots ,p_{k}\right)$ y $\sum_{k=1}^{K}p_{k}=1$.
+
+-   Sea $N_i$ el número de elementos en el i-ésiamo dominio y $N_{ik}$ el número de elementos que tienen la k-ésima categoría, note que $\sum_{k=1}^{K}N_{ik}=N_{i}$ y $p_{ik}=\frac{N_{ik}}{N_{i}}$.
+
+-   Sea $\hat{p}_{ik}$ la estimación directa de $p_{ik}$ y $v_{ik}=Var\left(\hat{p}_{ik}\right)$ y denote el estimador de la varianza por $\hat{v}_{ik}=\widehat{Var}\left(\hat{p}_{ik}\right)$
+
+# Consideraciones para el modelo multinomial.  
+
+El efecto diseño cambia entre categoría, por tanto, lo primero será definir el tamaño de muestra efectivo por categoría. Esto es:
+
+La estimación de $\tilde{n}$ esta dado por $\tilde{n}_{ik} = \frac{(\tilde{p}_{ik}\times(1-\tilde{p}_{ik}))}{\hat{v}_{ik}},$
+
+$\tilde{y}_{ik}=\tilde{n}_{ik}\times\hat{p}_{ik}$
+
+luego, $\hat{n}_{i} = \sum_{k=1}^{K}\tilde{y}_{ik}$
+
+de donde se sigue que $\hat{y}_{ik} = \hat{n}_i\times \hat{p}_{ik}$
+
+# Modelo de área multinomial. 
+
+Sea $\boldsymbol{\theta}=\left(p_{1},p_{2}, p_{3}\right)^{T}=\left(\frac{N_{i1}}{N_{i}},\frac{N_{i2}}{N_{i}}\frac{N_{i3}}{N_{i}}\right)^{T}$, entonces el modelo multinomial para el i-ésimo dominio estaría dado por:
+
+$$
+\left(\tilde{y}_{i1},\tilde{y}_{i2},\tilde{y}_{i3}\right)\mid\hat{n}_{i},\boldsymbol{\theta}_{i}\sim multinomial\left(\hat{n}_{i},\boldsymbol{\theta}_{i}\right)
+$$ 
+Ahora, puede escribir $p_{ik}$ como :
+
+$\ln\left(\frac{p_{i2}}{p_{i1}}\right)=\boldsymbol{X}_{i}^{T}\beta_{2} + u_{i2}$ y
+$\ln\left(\frac{p_{i3}}{p_{i1}}\right)=\boldsymbol{X}_{i}^{T}\beta_{3}+ u_{i3}$
+
+# Modelo de área multinomial. 
+
+Dada la restricción $1 = p_{i1} + p_{i2} + p_{i3}$ entonces 
+$$p_{i1} + p_{i1}(e^{\boldsymbol{X}_{i}^{T}\boldsymbol{\beta_{2}}}+  u_{i2})+p_{i1}(e^{\boldsymbol{X}_{i}^{T}\boldsymbol{\beta}_{3}} + u_{i3})$$ de donde se sigue que 
+
+$$
+p_{i1}=\frac{1}{1+e^{\boldsymbol{X}_{i}^{T}\boldsymbol{\beta_{2}}}+ u_{i2}+e^{\boldsymbol{X_{i}}^{T}\boldsymbol{\beta_{2}}}+ u_{i3}}
+$$
+
+# Modelo de área multinomial. 
+
+Las expresiones para $p_{i2}$ y $p_{i3}$ estarían dadas por: 
+
+$$
+p_{i2}=\frac{e^{\boldsymbol{X}_{i}^{T}\boldsymbol{\beta}_{2}} + u_{i2}}{1+e^{\boldsymbol{X}_{i}^{T}\boldsymbol{\beta_{2}}}+ u_{i2}+e^{\boldsymbol{X_{i}}^{T}\boldsymbol{\beta_{2}}}+ u_{i3}}
+$$
+
+$$
+p_{i3}=\frac{e^{\boldsymbol{X}_{i}^{T}\boldsymbol{\beta}_{3}}+ u_{i3}}{1+e^{\boldsymbol{X}_{i}^{T}\boldsymbol{\beta_{2}}}+ u_{i2}+e^{\boldsymbol{X_{i}}^{T}\boldsymbol{\beta_{3}}}+ u_{i3}}
+$$
+
+# Estimación directa por municipio. 
+
+- Una persona encuestada puede tener uno de los siguientes estados: ocupadas, desocupadas o inactivo.
+
+- Para cada dominio se calcula el número de personas ocupadas, desocupadas e inactivas en cada dominio y se estima la proporción de personas en cada una de estas categorías con sus respectivos errores estándar y efecto de diseño.
+
+# Selección de dominios 
+
+```{r, echo=FALSE}
+indicador_dam1 <- readRDS("www/08_Mod_Trabajo/01_Estimate_dir.Rds") 
+```
+
+-   Se emplean varias medidas de calidad, entre ellas, se cuenta el número de dominios que tienen dos o más unidades primarias de muestreo (UPM), así como el efecto de diseño mayor a 1 y las varianzas mayores a 0. 
+
+-   Los dominios seleccionados son:
+
+    - Dominios con dos o más upm. 
+    
+    - Tener resultado en el DEFF.
+    
+    
+El número de dominios seleccionados fue de `r nrow(indicador_dam1)`
+
+# Modelo programando en `STAN`
+Crear una función que simplifica los calculos. 
+\scriptsize
+```
+functions {
+  matrix pred_theta(matrix Xp, int p, matrix beta){
+  int D1 = rows(Xp);
+  real num1[D1, p];
+  real den1[D1];
+  matrix[D1,p] theta_p;
+  for(d in 1:D1){
+    num1[d, 1] = 1;
+    num1[d, 2] = exp(Xp[d, ] * beta[1, ]' ) ;
+    num1[d, 3] = exp(Xp[d, ] * beta[2, ]' ) ;
+    den1[d] = sum(num1[d, ]);
+  }
+  for(d in 1:D1){
+    for(i in 2:p){
+    theta_p[d, i] = num1[d, i]/den1[d];
+    }
+    theta_p[d, 1] = 1/den1[d];
+   }
+ return theta_p  ;
+  }}
+
+```
+
+# Modelo programando en `STAN`
+\small
+```
+data {
+  int<lower=1> D; // número de dominios 
+  int<lower=1> P; // categorías
+  int<lower=1> K; // cantidad de regresores
+  int y_tilde[D, P]; // matriz de datos
+  matrix[D, K] X_obs; // matriz de covariables
+  int<lower=1> D1; // número de dominios 
+  matrix[D1, K] X_pred; // matriz de covariables
+}
+parameters {
+  matrix[P-1, K] beta;// matriz de parámetros 
+  real<lower=0> sigma2_u1;
+  real<lower=0> sigma2_u2;
+  vector[D] u1;
+  vector[D] u2;
+}
+```
+
+# Modelo programando en `STAN`
+\scriptsize
+```
+transformed parameters {
+  simplex[P] theta[D];// vector de parámetros;
+  real num[D, P];
+  real den[D];
+  real<lower=0> sigma_u1;
+  real<lower=0> sigma_u2;
+  sigma_u1 = sqrt(sigma2_u1); 
+  sigma_u2 = sqrt(sigma2_u2); 
+  for(d in 1:D){
+    num[d, 1] = 1;
+    num[d, 2] = exp(X_obs[d, ] * beta[1, ]' + u1[d]) ;
+    num[d, 3] = exp(X_obs[d, ] * beta[2, ]' + u2[d]) ;
+    den[d] = sum(num[d, ]);
+  }
+  for(d in 1:D){
+    for(p in 2:P){
+    theta[d, p] = num[d, p]/den[d];
+    }
+    theta[d, 1] = 1/den[d];
+  }
+}
+```
+
+# Modelo programando en `STAN`
+\small
+```
+model {
+ u1 ~ normal(0, sigma_u1);
+ u2 ~ normal(0, sigma_u2);
+ sigma2_u1 ~  inv_gamma(0.0001, 0.0001);
+ sigma2_u2 ~  inv_gamma(0.0001, 0.0001);
+ for(p in 2:P){
+    for(k in 1:K){
+      beta[p-1, k] ~ normal(0, 10000);
+    } }
+for(d in 1:D){
+    target += multinomial_lpmf(y_tilde[d, ] | theta[d, ]); 
+  }
+}
+
+generated quantities {
+  matrix[D1,P] theta_pred;
+  theta_pred = pred_theta(X_pred, P, beta);
+}
+
+```
+
+# Dominios observados
+
+Seleccionar las variables del modelo y crear matriz de covariables.
+  
+```{r, eval=FALSE}
+names_cov <-
+  c("dam2", "tasa_desocupacion", "hacinamiento",
+    "piso_tierra","luces_nocturnas",
+    "cubrimiento_cultivo","modificacion_humana"
+  )
+X_pred <-
+  anti_join(
+    statelevel_predictors_df %>%
+     select(all_of(names_cov)),
+      indicador_dam1 %>% select(dam2))
+```
+
+
+# Dominios NO observados 
+
+Creando la matriz de covariables para los dominios no observados (`X_pred`) y los observados (`X_obs`)
+  
+```{r, eval=FALSE}
+X_pred %<>%
+  data.frame() %>%
+  select(-dam2)  %>%  as.matrix()
+
+X_obs <- inner_join(indicador_dam1 %>%
+                      select(dam2, id_orden),
+statelevel_predictors_df %>% 
+  select(all_of(names_cov))) %>%
+  arrange(id_orden) %>%
+  data.frame() %>%
+  select(-dam2, -id_orden)  %>%
+  as.matrix()
+```
+
+# Calculando el $n_{efectivo}$ y el $\tilde{y}$ 
+  
+```{r,eval=FALSE}
+D <- nrow(indicador_dam1)
+P <- 3 # Ocupado, desocupado, inactivo.
+Y_tilde <- matrix(NA, D, P)
+n_tilde <- matrix(NA, D, P)
+Y_hat <- matrix(NA, D, P)
+
+# n efectivos ocupado
+n_tilde[,1] <- 
+(indicador_dam1$Ocupado*(1 - indicador_dam1$Ocupado))/
+ indicador_dam1$Ocupado_var
+
+Y_tilde[,1] <- n_tilde[,1]* indicador_dam1$Ocupado
+```
+
+# Calculando el $n_{efectivo}$ y el $\tilde{y}$ 
+
+```{r,eval=FALSE}
+
+n_tilde[,2] <- 
+(indicador_dam1$Desocupado*(1 - 
+  indicador_dam1$Desocupado))/
+  indicador_dam1$Desocupado_var
+Y_tilde[,2] <- 
+  n_tilde[,2]* indicador_dam1$Desocupado
+
+# n efectivos Inactivo
+n_tilde[,3] <-
+(indicador_dam1$Inactivo*(1 - 
+ indicador_dam1$Inactivo))/
+  indicador_dam1$Inactivo_var
+
+Y_tilde[,3] <- n_tilde[,3]* indicador_dam1$Inactivo
+
+```
+
+# Calculado $\hat{Y}$ y $\hat{n}_i$
+
+```{r, eval=FALSE}
+ni_hat = rowSums(Y_tilde)
+Y_hat[,1] <- ni_hat* indicador_dam1$Ocupado
+Y_hat[,2] <- ni_hat* indicador_dam1$Desocupado
+Y_hat[,3] <- ni_hat* indicador_dam1$Inactivo
+Y_hat <- ceiling(Y_hat)
+```
+
+# Creando lista de datos para `STAN`
+
+```{r, eval=FALSE}
+X1_obs <- cbind(matrix(1,nrow = D,ncol = 1),X_obs)
+K = ncol(X1_obs)
+D1 <- nrow(X_pred)
+X1_pred <- cbind(matrix(1,nrow = D1,ncol = 1),X_pred)
+
+sample_data <- list(D = D,
+                    P = P,
+                    K = K,
+                    y_tilde = Y_hat,
+                    X_obs = X1_obs,
+                    X_pred = X1_pred,
+                    D1 = D1)
+```
+
+# Compilando el modelo en `STAN`
+\small
+```{r, eval=FALSE}
+fit_mcmc2 <- stan(
+file = "www/08_Mod_Trabajo/00_Multinomial_simple_no_cor.stan", 
+  data = sample_data, 
+ verbose = TRUE,
+  warmup = 1000,# number of warmup iterations per chain
+  iter = 2000,  # total number of iterations per chain
+  cores = 4,    # number of cores (could use one per chain)
+)
+
+saveRDS(fit_mcmc2,
+        "www/08_Mod_Trabajo/fit_multinomial_no_cor.Rds")
+```
+
+# Validación del modelo 
+
+La validación de un modelo es esencial para evaluar su capacidad para predecir de manera precisa y confiable los resultados futuros. En el caso de un modelo de área con respuesta multinomial, la validación se enfoca en medir la precisión del modelo para predecir las diferentes categorías de respuesta.
+
+# Chequeo predictivo posterior
+
+```{r echo=FALSE, out.width = "400px", out.height="350px", fig.cap= "PPC modelo multinomial"}
+knitr::include_graphics("www/08_Mod_Trabajo/02_Fig_ppc.png")
+```
+
+# Estimación de los parámetros. 
+
+Las estimaciones de los parámetros son obtenida directamente de las cadenas generadas por `STAN`, el proceso es organizar la información para tener concordancia son cada uno de los dominios. Luego de esto se obtiene la siguiente tabla.
+
+```{r, echo=FALSE}
+readRDS("www/08_Mod_Trabajo/03_estimaciones_stan.rds") %>% 
+  select(dam2,Ocupado_mod:Inactivo_mod) %>% head(5) %>% 
+  tba(cap = "Estimación del modelo multinomial")
+
+```
+
+# Metodología de Benchmarking 
+
+El proceso de Benchmarking se debe realizar para cada una de las categorías siguiendo los pasos que fueron realizados previamente. La distribución de los ponderadores se muestran a continuación. 
+
+```{r echo=FALSE, out.width = "300px", out.height="550px", fig.cap= "Distribución de los pesos"}
+knitr::include_graphics("www/08_Mod_Trabajo/04_Plot_Bench_gk.jpeg")
+```
+
+# Mapas de los indicadores del mercado laboral 
+
+```{r echo=FALSE, out.width = "400px", out.height="300px", fig.cap= "Mapas de Ocupados"}
+knitr::include_graphics("www/08_Mod_Trabajo/05_Ocupados.png")
+```
+
+# Mapas de los indicadores del mercado laboral 
+
+```{r echo=FALSE, out.width = "400px", out.height="300px", fig.cap= "Mapas de Desocupados"}
+knitr::include_graphics("www/08_Mod_Trabajo/06_Desocupados.png")
+```
+
+# Mapas de los indicadores del mercado laboral 
+
+```{r echo=FALSE, out.width = "400px", out.height="300px", fig.cap= "Mapas de Inactivo"}
+knitr::include_graphics("www/08_Mod_Trabajo/07_Inactivo.png")
+```
 
 
 # ¡Gracias!
