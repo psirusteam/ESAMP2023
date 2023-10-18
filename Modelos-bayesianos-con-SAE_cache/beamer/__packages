@@ -17,4 +17,6 @@ kableExtra
 bayesplot
 posterior
 patchwork
+StanHeaders
+rstan
 gtsummary

@@ -6,11 +6,13 @@ format:
     colortheme: dove
     fonttheme: default
     incremental: false
+    aspectratio: 1610
     #theme: Berkeley
     toc: true
     slide_level: 2
     #highlight: pygments
 Email: andres.gutierrez@cepal.org
+lang: es
 editor_options:
   markdown:
     wrap: 90
@@ -33,6 +35,9 @@ library(kableExtra)
 library(bayesplot) 
 library(posterior)
 library(patchwork)
+library(rstan)
+library(bayesplot)
+library(posterior)
 
 select <- dplyr::select
 
@@ -50,10 +55,13 @@ tba <- function(dat, cap = NA) {
   kable(dat,
         format = "latex",
         digits =  4,
+        booktabs=T,
+      linesep="",
         caption = cap) %>%
     kable_styling(bootstrap_options = "striped", full_width = F) %>%
     kable_classic(full_width = F)
 }
+
 
 ```
 
@@ -213,6 +221,674 @@ grados de libertad se reducen a la siguiente expresión:
 
           gl = #UPMs − #Estrato
 
+# Introducción al pensamiento bayesiano. 
+
+## Modelos de áreas con el enfoque de **Tom**
+
+Y te levantas un día...
+
+-   Y te sientes un poco raro, y débil. Vas al médico y te hacen exámenes. Uno de ellos te marca positivo para una enfermedad muy rara que solo afecta al 0.1% de la población.
+
+**No son buenas noticias.**
+
+-   Vas al consultorio del médico y le preguntas qué tan específico es el examen. Te dice que es muy preciso; identifica correctamente al 99% de la gente que tiene la enfermedad.
+
+## Y conoces a Thomas...
+
+```{r echo=FALSE, out.width = "400px", out.height="250px",fig.align='center'}
+include_graphics("www/00_Intro_bayes/01_Fig_Ton.PNG")
+```
+
+## ¿cómo funciona?
+
+```{r echo=FALSE, out.width = "400px", out.height="250px",fig.align='center'}
+include_graphics("www/00_Intro_bayes/02_Fig_bayes.png")
+```
+
+## ¿cómo funciona?
+
+```{r echo=FALSE, out.width = "400px", out.height="250px",fig.align='center'}
+include_graphics("www/00_Intro_bayes/03_Fig_bayes2.png")
+```
+
+## Y pides una segunda opinión
+
+-   Y esta vez el médico ordena que vuelves a realizarte ese mismo examen... y vuelves a marcar positivo para esa enfermedad.
+
+- **Y vuelves a preguntarte:** _¿cuál es la probabilidad de que tenga esa enfermedad?_
+
+Esta vez, has actualizado tu información sobre $Pr(E)$, pues ya marcaste positivo en un examen
+
+$$
+Pr(E)= 0.09 \ Y \ Pr(-E) = 0.91
+$$
+
+Por lo tanto:
+
+$$
+Pr(E \mid + +) = 0.997 \approx 91\%
+$$
+
+## Elementos de la regla de Bayes
+
+En términos de inferencia para $\boldsymbol{\theta}$, es necesario encontrar la distribución de los parámetros condicionada a la observación de los datos. Para este fin, es necesario definir la distribución conjunta de la variable de interés con el vector de parámetros.
+
+$$
+p(\boldsymbol{\theta},\boldsymbol{Y})=p(\boldsymbol{\theta})p(\boldsymbol{Y} \mid \boldsymbol{\theta})
+$$
+
+-   La distribución $p(\boldsymbol{\theta})$ se le conoce con el nombre de distribución previa.
+
+-   El término $p(\boldsymbol{Y} \mid \boldsymbol{\theta})$ es la distribución de muestreo, verosimilitud o distribución de los datos.
+
+-   La distribución del vector de parámetros condicionada a los datos observados está dada por
+
+$$
+p(\boldsymbol{\theta} \mid \boldsymbol{Y})=\frac{p(\boldsymbol{\theta},\boldsymbol{Y})}{p(\boldsymbol{Y})}=\frac{p(\boldsymbol{\theta})p(\boldsymbol{Y} \mid \boldsymbol{\theta})}{p(\boldsymbol{Y})}
+$$
+
+## Regla de Bayes
+
+-   El término $p(\boldsymbol{\theta} \mid \boldsymbol{Y})$ se le conoce con el nombre de distribución ***posterior***.  
+
+-   El denominador no depende del vector de parámetros y considerando a los datos observados como fijos, corresponde a una constante y puede ser obviada. Luego, 
+
+$$
+    p(\boldsymbol{\theta} \mid \boldsymbol{Y})\propto p(\boldsymbol{Y} \mid \boldsymbol{\theta})p(\boldsymbol{\theta})
+$$
+
+
+
+## Distribución previa informativa para $\theta$
+
+```{r echo=FALSE, out.width = "400px", out.height="250px",fig.align='center'}
+include_graphics("www/00_Intro_bayes/04_Fig_bayes_previa.PNG")
+```
+
+## Distribución previa NO informativa para $\theta$
+
+```{r echo=FALSE, out.width = "400px", out.height="250px",fig.align='center'}
+include_graphics("www/00_Intro_bayes/05_Fig_bayes_previa2.PNG")
+```
+
+## Modelo de área Poisson 
+
+Suponga que $\boldsymbol{Y}=\{Y_1,\ldots,Y_n\}$ es una muestra aleatoria de variables con distribución Poisson con parámetro $\theta$, la función de distribución conjunta o la función de verosimilitud está dada por
+$$
+p(\boldsymbol{Y} \mid \theta) = \prod_{i=1}^n\frac{e^{-\theta}\theta^{y_i}}{y_i!}I_{\{0,1,\ldots\}}(y_i)
+$$
+
+$$
+= \frac{e^{-n\theta}\theta^{\sum_{i=1}^ny_i}}{\prod_{i=1}^ny_i!}I_{\{0,1,\ldots\}^n}(y_1,\ldots,y_n)
+$$
+
+donde $\{0,1\ldots\}^n$ denota el producto cartesiano $n$ veces sobre el conjunto $\{0,1\ldots\}$. 
+
+El parámetro $\theta$ está restringido al espacio $\Theta=(0,\infty)$.  
+
+## Distribución previa para $\theta$
+
+-   La distribución previa del parámetro $\theta$ dada por
+
+$$
+p(\theta \mid \alpha,\beta)=\frac{\beta^\alpha}{\Gamma(\alpha)}\theta^{\alpha-1} e^{-\beta\theta}I_{(0,\infty)}(\theta).
+$$
+
+-   La distribución posterior del parámetro $\theta$ está dada por
+
+$$
+\theta \mid \boldsymbol{Y} \sim Gamma\left(\sum_{i=1}^ny_i+\alpha,n+\beta\right)
+$$
+
+## Proceso de estimación en **STAN**
+
+Sea $Y$ el conteo de personas encuestadas que se encuentran por debajo de la línea de pobreza, expresado como una tasa de (X) por cada 100 habitantes, por división administrativa del país.
+
+```{r,echo=TRUE}
+dataPois <- readRDS("www/00_Intro_bayes/Poisson/dataPoisson.rds")
+```
+
+```{r,echo=FALSE}
+tba(dataPois %>% head(10), cap = "Conteno de personas" )
+```
+
+## Histrograma con el conteno de personas
+
+```{r echo=FALSE, out.width = "400px", out.height="300px",fig.align='center',fig.cap="Conteno de personas por división administrativa"}
+include_graphics("www/00_Intro_bayes/Poisson/02_Hist_pois.png")
+```
+
+## Modelo escrito en código `STAN`
+\small
+```
+data {
+  int<lower=0> n;      // Número de áreas geograficas 
+  int<lower=0> y[n];   // Conteos por area
+  real<lower=0> alpha;
+  real<lower=0> beta;
+}
+parameters {
+  real<lower=0> theta;
+}
+model {
+  y ~ poisson(theta);
+  theta ~ gamma(alpha, beta);
+}
+generated quantities {
+    real ypred[n];                    // vector de longitud n
+    for(ii in 1:n){
+    ypred[ii] = poisson_rng(theta);
+    }
+}
+
+```
+
+## Preparando datos para código `STAN`
+
+-   Organizando datos para STAN
+
+```{r,eval=FALSE}
+sample_data <- list(n = nrow(dataPois), y = dataPois$n, 
+                    alpha = 0.001, beta = 0.001)
+```
+
+-   Ejecutando el código de `STAN`
+
+```{r, eval=FALSE}
+stan_pois <- "www/00_Intro_bayes/Poisson/03_Poisson.stan"
+model_poisson <-
+  stan(
+    file = stan_pois, data = sample_data,
+    warmup = 500,
+    iter = 1000,
+    verbose = FALSE,   cores = 4
+  )
+saveRDS(model_poisson,
+           "www/00_Intro_bayes/Poisson/model_poisson.rds")
+
+```
+
+
+## Resultados de la estimación del  parámetro $\theta$
+
+```{r,eval=FALSE}
+tabla_posi <- summary(model_poisson, 
+                      pars =c("theta"))$summary
+tabla_posi%>%tba()
+
+```
+\small
+```{r, echo=FALSE}
+tabla_posi <- readRDS("www/00_Intro_bayes/Poisson/04_tabla_theta.rds")
+tabla_posi %>% tba() 
+```
+
+## Convergencias de las cadenas el parámetro $\theta$
+
+```{r,eval=FALSE}
+posterior_theta <- as.array(model_poisson, pars = "theta")
+p1 <- (mcmc_dens_chains(posterior_theta) +
+    mcmc_areas(posterior_theta) ) / mcmc_trace(posterior_theta)
+```
+
+```{r echo=FALSE, out.width = "650px", out.height="200px",fig.align='center', fig.cap="Cadenas para theta"}
+knitr::include_graphics("www/00_Intro_bayes/Poisson/04_Pois_theta.png")
+```
+
+## Chequeo predictivo posterior
+
+```{r, eval=FALSE}
+y_pred_B<-as.array(model_poisson,pars ="ypred") %>% 
+  as_draws_matrix()
+
+rowsrandom<-sample(nrow(y_pred_B),100)
+
+y_pred2<-y_pred_B[rowsrandom,]
+
+p1<- ppc_dens_overlay(y =as.numeric(dataPois$n*100), y_pred2*100)
+
+
+```
+
+## Chequeo predictivo posterior
+
+```{r echo=FALSE, out.width = "550px", out.height="250px",fig.align='center', fig.cap="Cadenas para theta"}
+knitr::include_graphics("www/00_Intro_bayes/Poisson/05_ppc.png")
+```
+
+
+## Modelo de unidad: Normal con media y varianza desconocida
+
+- En el modelo normal se considera un conjunto de variables independientes e idénticamente distribuidas $Y_1,\cdots,Y_n\sim N(\theta,\sigma^2)$.
+
+- Cuando se desconocen tanto la media como la varianza de la distribución, se plantean diferentes enfoques para asignar las distribuciones previas para $\theta$ y $\sigma^2$ según el contexto del problema.
+
+## Distribuciones previas para $\theta$ y $\sigma^2$
+
+Se describen tres posibles suposiciones sobre las distribuciones previas para $\theta$ y $\sigma^2$, considerando independencia y nivel de informatividad.
+
+  -   Suponer que la distribución previa $p(\theta)$ es independiente de la distribución previa $p(\sigma^2)$ y que ambas distribuciones son informativas.
+
+  -   Suponer que la distribución previa $p(\theta)$ es independiente de la distribución previa $p(\sigma^2)$ y que ambas distribuciones son no informativas.
+
+  -   Suponer que la distribución previa para $\theta$ depende de $\sigma^2$ y escribirla como $p(\theta \mid \sigma^2)$, mientras que la distribución previa de $\sigma^2$ no depende de $\theta$ y se puede escribir como $p(\sigma^2)$.
+
+
+Se establece la distribución previa para el parámetro $\theta$ como $\theta \sim Normal(0,10000)$ y para el parámetro $\sigma^2$ como $\sigma^2 \sim IG(0.0001,0.0001)$.
+
+## Definición del modelo normal
+
+- El objetivo del modelo es estimar el ingreso medio de las personas, representado como $\bar{Y}_d = \frac{\sum_{U_d}y_{di}}{N_d}$.
+
+- Se muestra una forma de estimar $\bar{Y}$ mediante el uso de $\hat{y}_{di}$, el cual es el valor esperado de $y_{di}$ bajo una medida de probabilidad inducida por el modelo.
+
+- Finalmente, se presenta la estimación de $\hat{\bar{Y}}_d = \frac{\sum_{U_{d}}\hat{y}_{di}}{N_d}$.
+
+
+## Proceso de estimación 
+
+-   Estimar el ingreso medio de las personas, es decir, 
+$$\bar{Y}_d = \frac{\sum_{U_d}y_{di}}{N_d}$$
+donde $y_{di}$ es el ingreso de cada personas. Note que
+
+$$
+\bar{Y}_d =  \frac{\sum_{s_d}y_{di} + \sum_{s^c_d}y_{di}}{N_d} 
+$$
+
+Ahora, el estimador de $\bar{Y}$ esta dado por: 
+
+$$
+\hat{\bar{Y}}_d = \frac{\sum_{s_d}y_{di} + \sum_{s^c_d}\hat{y}_{di}}{N_d}
+$$
+
+## Proceso de estimación 
+
+Ahora, es posible suponer que $\hat{y}_{di}$ es la esperanza condicional dado el modelamiento, es decir 
+
+ $$\hat{y}_{di}=E_{\mathscr{M}}\left(y_{di}\mid\boldsymbol{x}_{d},\boldsymbol{\beta}\right)$$,
+
+donde $\mathscr{M}$ hace referencia a la medida de probabilidad inducida por el modelamiento. Finalmente se tiene que, 
+
+$$
+\hat{\bar{Y}}_d = \frac{\sum_{U_{d}}\hat{y}_{di}}{N_d}
+$$
+
+
+## Proceso de estimación en **STAN**
+
+Sea $Y$ el logaritmo del ingreso para una división administrativa del país. 
+
+```{r}
+dataNormal <- readRDS("www/00_Intro_bayes/Normal/01_dataNormal.rds")
+tba(dataNormal %>% head(10), cap = "Logaritmo del ingreso" )
+```
+
+## Analisis gráfico del logaritmo del ingreso. 
+
+
+```{r echo=FALSE, out.width = "500px", out.height="250px",fig.align='center'}
+include_graphics("www/00_Intro_bayes/Normal/02_qqNormal.png")
+```
+
+## Modelo escrito en código de `STAN`
+
+::::  {.columns align=top .onlytextwidth}
+
+::: {.column width="40%" align=center}
+```
+data {
+  int<lower=0> n;
+  real y[n];
+}
+parameters {
+  real sigma;
+  real theta;
+}
+transformed parameters {
+  real sigma2;
+  sigma2 = pow(sigma, 2);
+}
+```
+:::
+
+::: {.column width="60%"}
+```
+model {
+  y ~ normal(theta, sigma);
+  theta ~ normal(0, 1000);
+  sigma2 ~ inv_gamma(0.001, 0.001);
+}
+generated quantities {
+    real ypred[n];                   
+    for(kk in 1:n){
+    ypred[kk] = normal_rng(theta,sigma);
+}
+}
+
+```
+:::
+
+:::: 
+
+
+
+
+
+## Preparando datos para el código de `STAN`
+
+-   Organizando datos para `STAN`
+
+```{r, eval=FALSE}
+sample_data <- list(n = nrow(dataNormal),
+                    y = dataNormal$logIngreso)
+```
+
+- Ejecutando `STAN` desde `R` mediante la librería **rstan**
+
+```{r, eval = FALSE, message=FALSE}
+NormalMeanVar  <- "www/00_Intro_bayes/Normal/03_NormalMeanVar.stan" 
+model_NormalMedia <- stan(
+  file = NormalMeanVar, 
+  data = sample_data,   
+  warmup = 500,         
+  iter = 1000,
+  verbose = FALSE, cores = 4              
+)
+saveRDS(model_NormalMedia,
+        "www/00_Intro_bayes/Normal/model_NormalMedia2.rds")
+```
+
+## Resultados de la estimación del parámetro $\theta$ y $\sigma^2$ es:
+
+```{r, eval=FALSE}
+tabla_Nor2 <- summary(model_NormalMedia, 
+        pars = c("theta", "sigma2", "sigma"))$summary
+
+tabla_Nor2 %>% tba()
+```
+\tiny
+```{r, echo=FALSE}
+tabla_Nor2 <- readRDS("www/00_Intro_bayes/Normal/04_tabla_Normal.rds")
+tabla_Nor2 %>% tba() 
+```
+
+## Convergencias de las cadenas el parámetro $\theta$
+
+```{r,eval=FALSE}
+posterior_theta <- as.array(model_NormalMedia, pars = "theta")
+(mcmc_dens_chains(posterior_theta) +
+    mcmc_areas(posterior_theta) ) / 
+  mcmc_trace(posterior_theta)
+
+```
+
+```{r echo=FALSE, out.width = "400px", out.height="250px",fig.align='center', fig.cap="Cadenas para theta"}
+knitr::include_graphics("www/00_Intro_bayes/Normal/05_Normal_theta.png")
+```
+
+## Convergencias de las cadenas el parámetro $\sigma^2$
+
+
+```{r,eval=FALSE}
+posterior_sigma2 <- as.array(model_NormalMedia, pars = "sigma2")
+(mcmc_dens_chains(posterior_sigma2) +
+    mcmc_areas(posterior_sigma2) ) / 
+  mcmc_trace(posterior_sigma2)
+```
+
+```{r echo=FALSE, out.width = "400px", out.height="250px",fig.align='center', fig.cap="Cadenas para sigma2"}
+knitr::include_graphics("www/00_Intro_bayes/Normal/06_Normal_sigma2.png")
+```
+
+## Chequeo predictivo posterior del ingreso 
+
+```{r,eval=FALSE}
+
+y_pred_B <- as.array(model_NormalMedia, pars = "ypred") %>%
+  as_draws_matrix()
+
+rowsrandom <- sample(nrow(y_pred_B), 100)
+
+y_pred2 <- y_pred_B[rowsrandom,]
+
+ppc_dens_overlay(
+  y = as.numeric(exp(dataNormal$logIngreso) - 1), y_pred2) + 
+  xlim(0, 5000000)
+```
+
+## Chequeo predictivo posterior del ingreso 
+
+```{r echo=FALSE, out.width = "450px", out.height="250px",fig.align='center', fig.cap="PPC para el ingreso"}
+knitr::include_graphics("www/00_Intro_bayes/Normal/06_PPC_ingreso.png")
+```
+
+
+## Modelos lineales.
+
+La regresión lineal es la técnica básica del análisis econométrico. Mediante dicha técnica tratamos de determinar relaciones de dependencia de tipo lineal entre una variable dependiente o endógena, respecto de una o varias variables explicativas o exógenas.
+
+
+## Modelos lineales bayesiano.
+
+En primer lugar, nótese que el interés particular recae en la distribución del vector de $n$ variables aleatorias $\boldsymbol{Y}=(Y_1\ldots,Y_n)'$ condicional a la matriz de variables auxiliares $\boldsymbol{X}$ e indexada por el vector de parámetros de interés $\boldsymbol{\beta}=(\beta_1,\ldots,\beta_q)'$ dada por $p(\boldsymbol{Y} \mid \boldsymbol{\beta},\boldsymbol{X})$.
+
+El modelo básico y clásico asume que la verosimilitud para las variables de interés es
+
+```{=tex}
+\begin{equation*}
+\boldsymbol{Y} \mid \boldsymbol{\theta},\sigma^2,\boldsymbol{X}\sim Normal_n(\boldsymbol{X}\boldsymbol{\beta},\sigma^2\boldsymbol{I}_n)
+\end{equation*}
+```
+en donde $\boldsymbol{I}_n$ denota la matriz identidad de orden $n\times n$. Por supuesto, el modelo normal no es el único que se puede postular como verosimilitud para los datos.
+
+
+## Parámetros independientes
+
+Suponiendo que los parámetros son independientes previa; es decir que la distribución previa conjunta está dada por \begin{equation*}
+p(\boldsymbol{\beta},\sigma^2)=p(\boldsymbol{\beta})p(\sigma^2)
+\end{equation*}
+
+Como es natural, la distribución previa del vector de parámetros $\boldsymbol{\beta}$ es normal, aunque esta vez la matriz de varianzas no va a depender del otro parámetro $\sigma^2$, por lo tanto se tiene que \begin{equation*}
+\boldsymbol{\beta} \sim Normal_q(\boldsymbol{b},\boldsymbol{B})
+\end{equation*}
+
+Igualmente, el parámetro $\sigma^2$ no depende de $\boldsymbol{\beta}$ y es posible asignarle la siguiente distribución previa 
+
+\begin{equation*}
+\sigma^2\sim IG\left(\frac{n_0}{2},\frac{n_0\sigma^2_0}{2}\right)
+\end{equation*}
+
+## Distribución posterior 
+
+La distribución posterior conjunta de $\boldsymbol{\beta}$ y $\sigma^2$ puede ser escrita como 
+
+\begin{align}
+p(\boldsymbol{\beta},\sigma^2 \mid \boldsymbol{Y},\boldsymbol{X})&\propto p(\boldsymbol{Y} \mid \boldsymbol{\beta},\sigma^2)p(\boldsymbol{\beta})p(\sigma^2)\notag \\
+&\propto (\sigma^2)^{-n/2} \exp\left\{-\frac{1}{2\sigma^2}\left(Q(\boldsymbol{\beta})+S^2_e\right)\right\}\notag\\
+&\times
+\exp\left\{-\frac{1}{2}(\boldsymbol{\beta}-\boldsymbol{b})'\boldsymbol{B}^{-1}(\boldsymbol{\beta}-\boldsymbol{b})\right\}
+(\sigma^2)^{-n_0/2-1} \exp\left\{-\frac{n_0\sigma^2_0}{2\sigma^2}\right\}\notag\\
+&=(\sigma^2)^{-\frac{n+n_0}{2}-1}
+\exp\left\{-\frac{1}{2\sigma^2}\left[Q(\boldsymbol{\beta})+S^2_e+n_0\sigma^2_0\right]\right\} \notag \\
+&\times
+\exp\left\{-\frac{1}{2}(\boldsymbol{\beta}-\boldsymbol{b})'\boldsymbol{B}^{-1}(\boldsymbol{\beta}-\boldsymbol{b})\right\}
+\end{align}
+
+## Distribución posterior de $\beta$
+
+La distribución posterior del parámetro $\boldsymbol{\beta}$ condicionado a $\sigma^2,\boldsymbol{Y},\boldsymbol{X}$ es \begin{equation*}
+\boldsymbol{\beta} \mid \sigma^2,\boldsymbol{Y},\boldsymbol{X} \sim Normal_q(\boldsymbol{b}_q,\boldsymbol{B}_q)
+\end{equation*}
+
+donde \begin{align*}
+\boldsymbol{B}_q &= \left(\boldsymbol{B}^{-1}+\frac{1}{\sigma^2}\boldsymbol{X}'\boldsymbol{X}\right)^{-1}\\
+\boldsymbol{b}_q &=\boldsymbol{B}_q\left(\boldsymbol{B}^{-1}\boldsymbol{b}+\frac{1}{\sigma^2}\boldsymbol{X}'\boldsymbol{Y}\right)
+\end{align*}
+
+## Distribución posterior de $\sigma^2$
+
+La distribución posterior del parámetro $\sigma^2$ condicionado a $\boldsymbol{\beta},\boldsymbol{Y},\boldsymbol{X}$ es \begin{equation*}
+\sigma^2 \mid \boldsymbol{\beta},\boldsymbol{Y},\boldsymbol{X} \sim IG\left( \frac{n_1}{2}, \frac{n_1\sigma_{\boldsymbol{\beta}}^2}{2}  \right)
+\end{equation*}
+
+donde $n_1=n+n_0$
+\begin{align*}
+n_1\sigma_{\boldsymbol{\beta}}^2&=&Q(\boldsymbol{\beta})+S^2_e+n_0\sigma^2_0\\
+Q(\boldsymbol{\beta})&=&(\boldsymbol{\beta}-\hat{\boldsymbol{\beta}})'(\boldsymbol{X}'\boldsymbol{X})(\boldsymbol{\beta}-\hat{\boldsymbol{\beta}})\\
+S^2_e&=&(\boldsymbol{y}-\boldsymbol{X}\hat{\boldsymbol{\beta}})'(\boldsymbol{y}-\boldsymbol{X}\hat{\boldsymbol{\beta}})
+\end{align*} y $\sigma^2_0$ es una estimación previa del parámetro de interés $\sigma^2$.
+
+
+## Modelo lineal en código de `STAN`
+\small
+```
+data {
+  int<lower=0> n;   // Número de observaciones
+  int<lower=0> K;   // Número de predictores
+  matrix[n, K] x;   // Matrix de predictores
+  vector[n] y;      // Vector respuesta
+}
+parameters {
+  vector[K] beta;       
+  real<lower=0> sigma2;
+}
+model {
+  to_vector(beta) ~ normal(0, 1000);
+  sigma2 ~ inv_gamma(0.0001, 0.0001); 
+  y ~ normal(x * beta, sqrt(sigma2));  // likelihood
+}
+generated quantities {
+    real ypred[n];  // vector de longitud n
+    ypred = normal_rng(x * beta, sqrt(sigma2));
+}
+
+```
+
+## Proceso de estimación en `STAN`
+Sea $Y$ el logaritmo del ingreso medio por división administrativa del país.
+
+```{r, echo=FALSE}
+datalm<-readRDS("www/00_Intro_bayes/Modelo/01_dataRegresion.rds") %>% 
+  filter(!is.na(logingreso))
+```
+\small
+```{r, echo=FALSE}
+tba(datalm[,1:5] %>%head(10),  cap ="Logaritmo del ingreso")
+```
+
+## Asociación de la variables  
+
+```{r, echo=FALSE}
+tab_cor <- readRDS("www/00_Intro_bayes/Modelo/02_tabla_cor.rds")
+tba(tab_cor,  cap ="Correlación con logaritmo del ingreso")
+```
+
+
+## Preparando el código de `STAN`
+
+Organizando datos para `STAN`
+
+```{r, eval=FALSE}
+fitLm2 <-"www/00_Intro_bayes/Modelo/03_ModeloLm.stan"
+
+Xdat <- model.matrix(
+  logingreso ~ luces_nocturnas + 
+    cubrimiento_cultivo +  cubrimiento_urbano +
+    modificacion_humana ,data = datalm)
+
+sample_data <- list(n = nrow(datalm),
+                    K = ncol(Xdat),
+                    x = as.matrix(Xdat),
+                    y = datalm$logingreso)
+```
+
+## Preparando datos para el código de `STAN` 
+
+```{r, eval=FALSE}
+
+model_fitLm2 <-
+  stan(
+    file = fitLm2,
+    data = sample_data,
+    warmup = 500,
+    iter = 1000,
+    verbose = FALSE,
+    cores = 4
+  )
+
+saveRDS(model_fitLm2,
+           "www/00_Intro_bayes/Modelo/model_fitLm2.rds")
+
+```
+
+
+## Resultados de la estimación del parámetro $\beta$ y $\sigma^2$ es:
+
+```{r, eval=FALSE}
+tabla_coef <- summary(model_fitLm2, 
+        pars = c("beta", "sigma2"))$summary
+```
+\tiny
+
+```{r, echo=FALSE}
+tabla_coef <- readRDS("www/00_Intro_bayes/Modelo/04_tabla_coef.rds")
+tabla_coef %>% tba() 
+```
+
+## Convergencias de las cadenas el parámetro $\theta$
+
+```{r,eval=FALSE, echo=FALSE}
+posterior_beta <- as.array(model_fitLm2,
+ pars = c("beta[2]","beta[3]","beta[4]"))
+
+(mcmc_dens_chains(posterior_beta) +
+    mcmc_areas(posterior_beta) ) / 
+  mcmc_trace(posterior_beta)
+
+```
+
+```{r echo=FALSE, out.width = "600px", out.height="250px",fig.align='center', fig.cap="Cadenas para beta"}
+knitr::include_graphics("www/00_Intro_bayes/Modelo/05_cadenas_beta.png")
+```
+
+## Convergencias de las cadenas el parámetro $\sigma^2$
+
+
+```{r,eval=FALSE, echo=FALSE}
+posterior_sigma2 <- as.array(model_fitLm2, pars = "sigma2")
+(mcmc_dens_chains(posterior_sigma2) +
+    mcmc_areas(posterior_sigma2) ) / 
+  mcmc_trace(posterior_sigma2)
+```
+
+```{r echo=FALSE, out.width = "600px", out.height="250px",fig.align='center', fig.cap="Cadenas para sigma2"}
+knitr::include_graphics("www/00_Intro_bayes/Modelo/06_cadenas_sigma.png")
+```
+
+## Chequeo predictivo posterior del ingreso 
+
+```{r,eval=FALSE}
+
+y_pred_B <- as.array(model_fitLm2, pars = "ypred") %>%
+  as_draws_matrix()
+
+rowsrandom <- sample(nrow(y_pred_B), 100)
+
+log_pred2 <- y_pred_B[rowsrandom,]
+y_pred2 <- exp(log_pred2)-1
+
+ppc_dens_overlay(
+  y = datalm$logingreso, log_pred2)/
+ppc_dens_overlay(
+  y = as.numeric(exp(datalm$logingreso) - 1), y_pred2) + 
+  xlim(0, 800000)
+```
+
+## Chequeo predictivo posterior del ingreso 
+
+```{r echo=FALSE, out.width = "450px", out.height="250px",fig.align='center', fig.cap="PPC para el ingreso"}
+knitr::include_graphics("www/00_Intro_bayes/Modelo/07_ppc_ingreso.png")
+```
 
 
 # Uso de métodos SAE
