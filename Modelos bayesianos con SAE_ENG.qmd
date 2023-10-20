@@ -1,0 +1,3626 @@
+---
+Title: "Disaggregation of Estimates in Small Areas: A Bayesian Approach"
+Subtitle: "ECLAC - Social Statistics Unit"
+format:  
+  beamer: default
+incremental: false
+aspectratio: 1610
+    #theme: Berkeley
+toc: true
+Email: andres.gutierrez@cepal.org
+editor_options:
+  markdown:
+    wrap: 90
+---
+
+```{r setup, include=FALSE}
+library(printr)
+library(ggplot2)
+library(magrittr)
+library(survey)
+library(srvyr)
+library(convey)
+library(TeachingSampling)
+library(printr)
+library(furrr)
+library(purrr)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+library(bayesplot) 
+library(posterior)
+library(patchwork)
+library(rstan)
+library(bayesplot)
+library(posterior)
+
+select <- dplyr::select
+
+
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  cache = TRUE
+)
+ggplot2::theme_set(theme_bw())
+options(digits = 4)
+
+tba <- function(dat, cap = NA) {
+  kable(
+    dat,
+    format = "latex",
+    digits =  4,
+    booktabs = T,
+    linesep = "",
+    caption = cap
+  ) %>%
+    kable_styling(bootstrap_options = "striped", full_width = F) %>%
+    kable_classic(full_width = F)
+}
+
+
+```
+
+# Sustainable Development Goal
+
+## 
+
+```{r echo=FALSE, out.width = "500px", out.height="250px",fig.align='center'}
+include_graphics("www/F_01_ODS.PNG")
+```
+
+## Some targets of SDG 2 (Zero Hunger)
+
+By 2030, end hunger and ensure access to
+all people, particularly the poor and those in
+vulnerable situations, including infants under 1 year of age, to healthy, nutritious, and sufficient food all year round.
+
+  - Prevalence of undernourishment.
+  
+  - Prevalence of moderate or severe food insecurity in the
+   population, according to the Food Insecurity Experience Scale.
+
+## Some targets of SDG 8 (Decent Work)
+
+By 2030, achieve full and productive employment and decent work for all women and men, including
+youth and persons with disabilities, and equal pay for equal work.
+
+  - Unemployment rate, disaggregated by gender, age, and persons with
+disabilities.
+
+
+## Fundamental Principle of Data Disaggregation
+
+  Indicators of the Sustainable Development Goals
+  should be disaggregated, whenever relevant, by income,
+  gender, age, race, ethnicity, migratory status, disability,
+  and geographical location, or other characteristics, in accordance
+  with the Fundamental Principles of Official Statistics.
+
+**General Assembly Resolution - 68/261**
+
+# Survey Limitations.
+
+## What is the Coefficient of Variation?
+
+The coefficient of variation is a measure of relative error for an
+estimator and is defined as:
+
+$$
+cve\left(\hat{\theta}\right)=\frac{SE\left(\hat{\theta}\right)}{\hat{\theta}}
+$$
+
+It is often expressed as a percentage, even though it is not
+bounded to the right, which makes it convenient when discussing
+the precision of statistics derived from surveys.
+
+## Alert Standards in Some Countries (Household Surveys)
+
+```{r echo=FALSE, out.width = "400px", out.height="250px",fig.align='center', fig.cap= "Alerts on Coefficients of Variation"}
+include_graphics("www/F_02_cve.PNG")
+```
+
+## Some Alerts Defined in the Publication
+
+When the threshold of the coefficient of variation is exceeded, some of the following alerts may appear:
+
+  -   Not published.
+  
+  -   Use with caution.
+  
+  -   Estimates require revisions, are not precise, and should be used with caution.
+  
+  -   Unreliable, less precise. 
+  
+  -   Does not meet publication standards. 
+  
+  -   With reservation, reference, questionable. 
+
+  -   Very random values, poor estimation.
+  
+  
+## Study Domains and Subpopulations of Interest
+
+A survey is designed to generate accurate and reliable information within predefined study domains. However, there are subpopulations that the survey did not address in its design but for which greater precision is desired.
+
+  -   Poverty incidence disaggregated by department or province (known and planned sample size).
+  
+  -   Unemployment rate disaggregated by gender (random but planned sample size).
+  
+  -   Net primary school attendance rate disaggregated by income quintiles (random sample size).
+
+## Precision of Estimators
+
+Because a survey is a partial investigation of a finite population, it's important to know that:
+
+  -   Indicators are not calculated from a survey; they are estimated using survey data.
+  
+  -   It is necessary to calculate the degree of error resulting from the inability to conduct a comprehensive investigation. This error is known as sampling error.
+  
+  -   The precision of an estimator is dependent on the confidence interval.
+
+A narrower interval results in greater precision and, therefore, lower sampling error.
+
+## Effective Sample Size
+
+  -   In household surveys with complex sampling designs, there is no sequence of variables that are independent and identically distributed.
+  
+  -   The sample $y_{1},\dots,y_{n}$ is not a vector in an n-dimensional space, where each component of the vector can vary independently.
+  
+  -   The final dimension of the vector ($y_{1},\dots,y_{n}$) is much smaller than n, due to hierarchical sampling and the relationship between the variable of interest and primary sampling units (PSUs).
+
+## Effective Sample Size
+
+The effective sample size is defined as follows:
+$$
+n_{effective}=\frac{n}{Deff}
+$$
+
+Where Deff is the design effect, which depends on: _1._ The average number of surveys conducted in each PSU. _2._ The correlation between the variable of interest and the same PSUs.
+
+It can be considered that if the effective sample size is not greater than a threshold, then the figure should not be considered for publication.
+
+
+## Degrees of Freedom
+
+In subpopulations, degrees of freedom are not considered fixed but rather variable.
+
+$$
+df=\sum_{h=1}^{H}v_{h}\times\left(n_{Ih}-1\right)
+$$
+
+Note that $ν_h$ is an indicator variable that takes the value one if stratum $h$ contains one or more cases of the subpopulation of interest, and $n_{Ih}$ is the number of primary sampling units (PSUs) in the stratum. In the most general case, degrees of freedom are reduced to the following expression:
+
+          df = #PSUs − #Stratum
+
+# Introduction to Bayesian Thinking.
+
+
+## Models of Areas with the **Tom Approach**
+
+And you wake up one day...
+
+-   You feel a little strange and weak. You go to the doctor, and they run some tests. One of them comes back positive for a very rare disease that only affects 0.1% of the population.
+
+**Not good news.**
+
+-   You go to the doctor's office and ask how specific the test is. They tell you it's very accurate; it correctly identifies 99% of the people who have the disease.
+
+## And you meet Thomas...
+
+```{r echo=FALSE, out.width = "500px", out.height="250px",fig.align='center'}
+include_graphics("www/00_Intro_bayes/01_Fig_Ton.PNG")
+```
+
+## How does it work?
+
+```{r echo=FALSE, out.width = "500px", out.height="250px",fig.align='center'}
+include_graphics("www/00_Intro_bayes/02_Fig_bayes.png")
+```
+
+## How does it work?
+
+```{r echo=FALSE, out.width = "500px", out.height="250px",fig.align='center'}
+include_graphics("www/00_Intro_bayes/03_Fig_bayes2.PNG")
+```
+
+## And you seek a second opinion
+
+-   This time the doctor orders you to retake the same test... and you test positive for that disease again.
+
+- **And you wonder again:** _What is the probability that I have this disease?_
+
+This time, you've updated your information about $Pr(E)$ because you've tested positive on a test
+
+$$
+Pr(E)= 0.09 \ And \ Pr(-E) = 0.91
+$$
+
+Therefore:
+
+$$
+Pr(E \mid ++) = 0.997 \approx 91\%
+$$
+
+## Elements of Bayes' Rule
+
+In terms of inference for $\boldsymbol{\theta}$, it's necessary to find the distribution of the parameters conditioned on the observation of the data. To achieve this, you need to define the joint distribution of the variable of interest with the parameter vector.
+
+$$
+p(\boldsymbol{\theta},\boldsymbol{Y})=p(\boldsymbol{\theta})p(\boldsymbol{Y} \mid \boldsymbol{\theta})
+$$
+
+-   The distribution $p(\boldsymbol{\theta})$ is known as the prior distribution.
+
+-   The term $p(\boldsymbol{Y} \mid \boldsymbol{\theta})$ is the sampling distribution, likelihood, or data distribution.
+
+-   The distribution of the parameter vector conditioned on the observed data is given by
+
+$$
+p(\boldsymbol{\theta} \mid \boldsymbol{Y})=\frac{p(\boldsymbol{\theta},\boldsymbol{Y})}{p(\boldsymbol{Y})}=\frac{p(\boldsymbol{\theta})p(\boldsymbol{Y} \mid \boldsymbol{\theta})}{p(\boldsymbol{Y})}
+$$
+
+
+## Bayes' Rule
+
+-   The term $p(\boldsymbol{\theta} \mid \boldsymbol{Y})$ is known as the ***posterior*** distribution.
+
+-   The denominator does not depend on the parameter vector, and considering the observed data as fixed, it corresponds to a constant and can be omitted. Therefore,
+
+$$
+    p(\boldsymbol{\theta} \mid \boldsymbol{Y})\propto p(\boldsymbol{Y} \mid \boldsymbol{\theta})p(\boldsymbol{\theta})
+$$
+
+## Informative Prior Distribution for $\theta$
+
+```{r echo=FALSE, out.width = "400px", out.height="250px",fig.align='center'}
+include_graphics("www/00_Intro_bayes/04_Fig_bayes_previa.PNG")
+```
+
+## Non-Informative Prior Distribution for $\theta$
+
+```{r echo=FALSE, out.width = "400px", out.height="250px",fig.align='center'}
+include_graphics("www/00_Intro_bayes/05_Fig_bayes_previa2.PNG")
+```
+
+## Poisson Area Model 
+
+Suppose $\boldsymbol{Y}=\{Y_1,\ldots,Y_n\}$ is a random sample of variables with a Poisson distribution with parameter $\theta$. The joint distribution function or likelihood function is given by
+$$
+p(\boldsymbol{Y} \mid \theta) = \prod_{i=1}^n\frac{e^{-\theta}\theta^{y_i}}{y_i!}I_{\{0,1,\ldots\}}(y_i)
+$$
+
+$$
+= \frac{e^{-n\theta}\theta^{\sum_{i=1}^ny_i}}{\prod_{i=1}^ny_i!}I_{\{0,1,\ldots\}^n}(y_1,\ldots,y_n)
+$$
+
+where $\{0,1,\ldots\}^n$ denotes the Cartesian product $n$ times over the set $\{0,1,\ldots\}$. 
+
+The parameter $\theta$ is restricted to the space $\Theta=(0,\infty)$.
+
+
+## Distribución previa para $\theta$
+
+-   La distribución previa del parámetro $\theta$ dada por
+
+$$
+p(\theta \mid \alpha,\beta)=\frac{\beta^\alpha}{\Gamma(\alpha)}\theta^{\alpha-1} e^{-\beta\theta}I_{(0,\infty)}(\theta).
+$$
+
+-   La distribución posterior del parámetro $\theta$ está dada por
+
+$$
+\theta \mid \boldsymbol{Y} \sim Gamma\left(\sum_{i=1}^ny_i+\alpha,n+\beta\right)
+$$
+## Prior Distribution for $\theta$
+
+-   The prior distribution for the parameter $\theta$ is given by
+
+$$
+p(\theta \mid \alpha, \beta)=\frac{\beta^\alpha}{\Gamma(\alpha)}\theta^{\alpha-1} e^{-\beta\theta}I_{(0,\infty)}(\theta).
+$$
+
+-   The posterior distribution for the parameter $\theta$ is given by
+
+$$
+\theta \mid \boldsymbol{Y} \sim \text{Gamma}\left(\sum_{i=1}^ny_i+\alpha, n+\beta\right)
+$$
+
+## Estimation Process in **STAN**
+
+Let $Y$ be the count of surveyed people living below the poverty line, expressed as a rate of (X) per 100 inhabitants, by administrative division of the country.
+
+```{r,echo=TRUE}
+dataPois <- readRDS("www/00_Intro_bayes/Poisson/dataPoisson.rds")
+```
+
+```{r,echo=FALSE}
+tba(dataPois %>% head(10), cap = "People Count" )
+```
+
+## Histogram with People Count
+
+```{r echo=FALSE, out.width = "400px", out.height="300px",fig.align='center',fig.cap="People count by administrative division"}
+include_graphics("www/00_Intro_bayes/Poisson/02_Hist_pois.png")
+```
+
+## Model Written in `STAN` Code
+\small
+```
+data {
+  int<lower=0> n;      // Number of geographic areas 
+  int<lower=0> y[n];   // Counts per area
+  real<lower=0> alpha;
+  real<lower=0> beta;
+}
+parameters {
+  real<lower=0> theta;
+}
+model {
+  y ~ poisson(theta);
+  theta ~ gamma(alpha, beta);
+}
+generated quantities {
+    real ypred[n];                    // Vector of length n
+    for(ii in 1:n){
+    ypred[ii] = poisson_rng(theta);
+    }
+}
+
+```
+
+## Preparing Data for `STAN` Code
+
+-   Organizing data for STAN
+
+```{r,eval=FALSE}
+sample_data <- list(n = nrow(dataPois), y = dataPois$n, 
+                    alpha = 0.001, beta = 0.001)
+```
+
+-   Running the `STAN` code
+
+```{r, eval=FALSE}
+stan_pois <- "www/00_Intro_bayes/Poisson/03_Poisson.stan"
+model_poisson <-
+  stan(
+    file = stan_pois, data = sample_data,
+    warmup = 500,
+    iter = 1000,
+    verbose = FALSE,   cores = 4
+  )
+saveRDS(model_poisson,
+           "www/00_Intro_bayes/Poisson/model_poisson.rds")
+
+```
+
+## Results of the Estimation of Parameter $\theta$
+
+```{r,eval=FALSE}
+tabla_posi <- summary(model_poisson, 
+                      pars =c("theta"))$summary
+tabla_posi%>%tba()
+
+```
+\small
+```{r, echo=FALSE}
+tabla_posi <- readRDS("www/00_Intro_bayes/Poisson/04_tabla_theta.rds")
+tabla_posi %>% tba() 
+```
+
+## Convergence of Chains for Parameter $\theta$
+
+```{r,eval=FALSE}
+posterior_theta <- as.array(model_poisson, pars = "theta")
+p1 <- (mcmc_dens_chains(posterior_theta) +
+    mcmc_areas(posterior_theta) ) / mcmc_trace(posterior_theta)
+```
+
+```{r echo=FALSE, out.width = "650px", out.height="250px",fig.align='center', fig.cap="Chains for theta"}
+knitr::include_graphics("www/00_Intro_bayes/Poisson/04_Pois_theta.png")
+```
+
+## Posterior Predictive Check
+
+```{r, eval=FALSE}
+y_pred_B<-as.array(model_poisson,pars ="ypred") %>% 
+  as_draws_matrix()
+
+rowsrandom<-sample(nrow(y_pred_B),100)
+
+y_pred2<-y_pred_B[rowsrandom,]
+
+p1<- ppc_dens_overlay(y =as.numeric(dataPois$n*100), y_pred2*100)
+
+
+```
+
+## Posterior Predictive Check
+
+```{r echo=FALSE, out.width = "850px", out.height="250px",fig.align='center', fig.cap="Chains for theta"}
+knitr::include_graphics("www/00_Intro_bayes/Poisson/05_ppc.png")
+```
+
+## Unit Model: Normal with Unknown Mean and Variance
+
+- In the normal model, a set of independent and identically distributed variables $Y_1,\cdots,Y_n\sim N(\theta,\sigma^2)$ is considered.
+
+- When both the mean and the variance of the distribution are unknown, different approaches are proposed to assign prior distributions to $\theta$ and $\sigma^2$ based on the problem context.
+
+## Prior Distributions for $\theta$ and $\sigma^2$
+
+Three possible assumptions about prior distributions for $\theta$ and $\sigma^2$ are described, considering independence and informativeness.
+
+  - Assume that the prior distribution $p(\theta)$ is independent of the prior distribution $p(\sigma^2)$ and that both distributions are informative.
+
+  - Assume that the prior distribution $p(\theta)$ is independent of the prior distribution $p(\sigma^2)$ and that both distributions are non-informative.
+
+  - Assume that the prior distribution for $\theta$ depends on $\sigma^2$ and write it as $p(\theta \mid \sigma^2)$, while the prior distribution for $\sigma^2$ does not depend on $\theta$ and can be written as $p(\sigma^2)$.
+
+The prior distribution is set for the parameter $\theta$ as $\theta \sim Normal(0,10000)$ and for the parameter $\sigma^2$ as $\sigma^2 \sim IG(0.0001,0.0001)$.
+
+## Definition of the Normal Model
+
+- The goal of the model is to estimate the average income of people, represented as $\bar{Y}_d = \frac{\sum_{U_d}y_{di}}{N_d}$.
+
+- A way to estimate $\bar{Y}$ using $\hat{y}_{di}$, which is the expected value of $y_{di}$ under a probability measure induced by the model, is shown.
+
+- Finally, the estimate of $\hat{\bar{Y}}_d = \frac{\sum_{U_{d}}\hat{y}_{di}}{N_d}$ is presented.
+
+## Estimation Process
+
+- To estimate the average income of people, i.e., 
+
+$$\bar{Y}_d = \frac{\sum_{U_d}y_{di}}{N_d}$$
+
+where $y_{di}$ is the income of each person. Note that
+
+$$
+\bar{Y}_d =  \frac{\sum_{s_d}y_{di} + \sum_{s^c_d}y_{di}}{N_d} 
+$$
+
+Now, the estimator of $\bar{Y}$ is given by: 
+
+$$
+\hat{\bar{Y}}_d = \frac{\sum_{s_d}y_{di} + \sum_{s^c_d}\hat{y}_{di}}{N_d}
+$$
+
+
+## Estimation Process 
+
+Now, it is possible to assume that $\hat{y}_{di}$ is the conditional expectation given the modeling, that is
+
+$$\hat{y}_{di}=E_{\mathscr{M}}\left(y_{di}\mid\boldsymbol{x}_{d},\boldsymbol{\beta}\right)$$,
+
+where $\mathscr{M}$ refers to the probability measure induced by the modeling. Finally, it is found that
+
+$$
+\hat{\bar{Y}}_d = \frac{\sum_{U_{d}}\hat{y}_{di}}{N_d}
+$$
+
+## Estimation Process in **STAN**
+
+Let $Y$ be the logarithm of income for an administrative division of the country. 
+
+```{r}
+dataNormal <- readRDS("www/00_Intro_bayes/Normal/01_dataNormal.rds")
+tba(dataNormal %>% head(10), cap = "Logarithm of income" )
+```
+
+## Graphical Analysis of Logarithm of Income
+
+```{r echo=FALSE, out.width = "500px", out.height="250px",fig.align='center'}
+include_graphics("www/00_Intro_bayes/Normal/02_qqNormal.png")
+```
+
+## Model Written in `STAN` Code
+
+
+::::  {.columns align=top .onlytextwidth}
+
+::: {.column width="40%" align=center}
+```
+data {
+  int<lower=0> n;
+  real y[n];
+}
+parameters {
+  real sigma;
+  real theta;
+}
+transformed parameters {
+  real sigma2;
+  sigma2 = pow(sigma, 2);
+}
+```
+:::
+
+::: {.column width="60%" align=center}
+```
+model {
+  y ~ normal(theta, sigma);
+  theta ~ normal(0, 1000);
+  sigma2 ~ inv_gamma(0.001, 0.001);
+}
+generated quantities {
+    real ypred[n];                   
+    for(kk in 1:n){
+    ypred[kk] = normal_rng(theta,sigma);
+}
+}
+
+```
+:::
+
+:::: 
+
+
+## Preparing Data for the `STAN` Code
+
+- Organizing data for `STAN`
+
+```{r, eval=FALSE}
+sample_data <- list(n = nrow(dataNormal),
+                    y = dataNormal$logIngreso)
+```
+
+- Running `STAN` from `R` using the **rstan** library
+
+```{r, eval = FALSE, message=FALSE}
+NormalMeanVar  <- "www/00_Intro_bayes/Normal/03_NormalMeanVar.stan" 
+model_NormalMedia <- stan(
+  file = NormalMeanVar, 
+  data = sample_data,   
+  warmup = 500,         
+  iter = 1000,
+  verbose = FALSE, cores = 4              
+)
+saveRDS(model_NormalMedia,
+        "www/00_Intro_bayes/Normal/model_NormalMedia2.rds")
+```
+
+## Results of the Estimation of the Parameters $\theta$ and $\sigma^2$ are:
+
+```{r, eval=FALSE}
+tabla_Nor2 <- summary(model_NormalMedia, 
+        pars = c("theta", "sigma2", "sigma"))$summary
+```
+
+\tiny
+
+```{r, echo=FALSE}
+tabla_Nor2 <- readRDS("www/00_Intro_bayes/Normal/04_tabla_Normal.rds")
+tabla_Nor2 %>% tba() 
+```
+
+## Convergence of Chains for Parameter $\theta$
+
+```{r,eval=FALSE}
+posterior_theta <- as.array(model_NormalMedia, pars = "theta")
+(mcmc_dens_chains(posterior_theta) +
+    mcmc_areas(posterior_theta) ) / 
+  mcmc_trace(posterior_theta)
+
+```
+
+```{r echo=FALSE, out.width = "400px", out.height="250px",fig.align='center', fig.cap="Chains for theta"}
+knitr::include_graphics("www/00_Intro_bayes/Normal/05_Normal_theta.png")
+```
+
+## Convergence of Chains for Parameter $\sigma^2$
+
+
+```{r,eval=FALSE}
+posterior_sigma2 <- as.array(model_NormalMedia, pars = "sigma2")
+(mcmc_dens_chains(posterior_sigma2) +
+    mcmc_areas(posterior_sigma2) ) / 
+  mcmc_trace(posterior_sigma2)
+```
+
+```{r echo=FALSE, out.width = "400px", out.height="250px",fig.align='center', fig.cap="Chains for sigma2"}
+knitr::include_graphics("www/00_Intro_bayes/Normal/06_Normal_sigma2.png")
+```
+
+## Posterior Predictive Check of Income
+
+```{r,eval=FALSE}
+
+y_pred_B <- as.array(model_NormalMedia, pars = "ypred") %>%
+  as_draws_matrix()
+
+rowsrandom <- sample(nrow(y_pred_B), 100)
+
+y_pred2 <- y_pred_B[rowsrandom,]
+
+ppc_dens_overlay(
+  y = as.numeric(exp(dataNormal$logIngreso) - 1), y_pred2) + 
+  xlim(0, 5000000)
+```
+
+## Posterior Predictive Check of Income
+
+```{r echo=FALSE, out.width = "450px", out.height="250px",fig.align='center', fig.cap="PPC for income"}
+knitr::include_graphics("www/00_Intro_bayes/Normal/06_PPC_ingreso.png")
+```
+
+
+## Linear Models.
+
+Linear regression is the basic technique in econometric analysis. Through this technique, we aim to determine linear dependence relationships between a dependent variable, or endogenous variable, and one or more explanatory variables, or exogenous variables.
+
+## Bayesian Linear Models
+
+First, note that the particular interest lies in the distribution of the vector of n random variables $\boldsymbol{Y} = (Y_1, \ldots, Y_n)'$ conditioned on the matrix of auxiliary variables $\boldsymbol{X}$ and indexed by the vector of parameters of interest $\boldsymbol{\beta} = (\beta_1, \ldots, \beta_q)'$ given by $p(\boldsymbol{Y} \mid \boldsymbol{\beta}, \boldsymbol{X}$.
+
+The basic and classical model assumes that the likelihood for the variables of interest is:
+
+$$
+\boldsymbol{Y} \mid \boldsymbol{\theta}, \sigma^2, \boldsymbol{X} \sim \text{Normal}_n(\boldsymbol{X}\boldsymbol{\beta}, \sigma^2\boldsymbol{I}_n)
+$$
+
+where $\boldsymbol{I}_n$ denotes the identity matrix of order $n \times n$. Of course, the normal model is not the only one that can be postulated as the likelihood for the data.
+
+
+## Independent Parameters
+
+Assuming that the parameters are independent a priori, meaning that the joint prior distribution is given by:
+
+$$
+p(\boldsymbol{\beta},\sigma^2) = p(\boldsymbol{\beta})p(\sigma^2)
+$$
+
+Naturally, the prior distribution for the parameter vector $\boldsymbol{\beta}$ is normal. However, this time, the variance-covariance matrix will not depend on the other parameter $\sigma^2$. So, you have:
+
+$$
+\boldsymbol{\beta} \sim \text{Normal}_q(\boldsymbol{b},\boldsymbol{B})
+$$
+
+Similarly, the parameter $\sigma^2$ does not depend on $\boldsymbol{\beta}$, and you can assign it the following prior distribution:
+
+$$
+\sigma^2 \sim \text{Inverse-Gamma}\left(\frac{n_0}{2},\frac{n_0\sigma^2_0}{2}\right)
+$$
+
+## Posterior Distribution
+
+The joint posterior distribution of $\boldsymbol{\beta}$ and $\sigma^2$ can be written as:
+
+
+\begin{align}
+p(\boldsymbol{\beta},\sigma^2 \mid \boldsymbol{Y},\boldsymbol{X})&\propto p(\boldsymbol{Y} \mid \boldsymbol{\beta},\sigma^2)p(\boldsymbol{\beta})p(\sigma^2)\notag \\
+&\propto (\sigma^2)^{-n/2} \exp\left\{-\frac{1}{2\sigma^2}\left(Q(\boldsymbol{\beta})+S^2_e\right)\right\}\notag\\
+&\times
+\exp\left\{-\frac{1}{2}(\boldsymbol{\beta}-\boldsymbol{b})'\boldsymbol{B}^{-1}(\boldsymbol{\beta}-\boldsymbol{b})\right\}
+(\sigma^2)^{-n_0/2-1} \exp\left\{-\frac{n_0\sigma^2_0}{2\sigma^2}\right\}\notag\\
+&=(\sigma^2)^{-\frac{n+n_0}{2}-1}
+\exp\left\{-\frac{1}{2\sigma^2}\left[Q(\boldsymbol{\beta})+S^2_e+n_0\sigma^2_0\right]\right\} \notag \\
+&\times
+\exp\left\{-\frac{1}{2}(\boldsymbol{\beta}-\boldsymbol{b})'\boldsymbol{B}^{-1}(\boldsymbol{\beta}-\boldsymbol{b})\right\}
+\end{align}
+
+
+## Posterior Distribution of $\beta$
+
+The posterior distribution of the parameter $\boldsymbol{\beta}$ conditioned on $\sigma^2,\boldsymbol{Y},\boldsymbol{X}$ is:
+
+$$
+\boldsymbol{\beta} \mid \sigma^2,\boldsymbol{Y},\boldsymbol{X} \sim \text{Normal}_q(\boldsymbol{b}_q,\boldsymbol{B}_q)
+$$
+Where:
+
+
+\begin{align*}
+\boldsymbol{B}_q &= \left(\boldsymbol{B}^{-1}+\frac{1}{\sigma^2}\boldsymbol{X}'\boldsymbol{X}\right)^{-1} \\
+\boldsymbol{b}_q &= \boldsymbol{B}_q\left(\boldsymbol{B}^{-1}\boldsymbol{b}+\frac{1}{\sigma^2}\boldsymbol{X}'\boldsymbol{Y}\right)
+\end{align*}
+
+
+## Posterior Distribution of $\sigma^2$
+
+The posterior distribution of the parameter $\sigma^2$ conditioned on $\boldsymbol{\beta},\boldsymbol{Y},\boldsymbol{X}$ is:
+
+$$
+\sigma^2 \mid \boldsymbol{\beta},\boldsymbol{Y},\boldsymbol{X} \sim \text{Inverse-Gamma}\left(\frac{n_1}{2}, \frac{n_1\sigma_{\boldsymbol{\beta}}^2}{2}\right)
+$$
+
+Where:
+
+
+\begin{align*}
+n_1 &= n + n_0 \\
+n_1\sigma_{\boldsymbol{\beta}}^2 &= Q(\boldsymbol{\beta})+S^2_e+n_0\sigma^2_0 \\
+Q(\boldsymbol{\beta}) &= (\boldsymbol{\beta}-\hat{\boldsymbol{\beta}})'(\boldsymbol{X}'\boldsymbol{X})(\boldsymbol{\beta}-\hat{\boldsymbol{\beta}}) \\
+S^2_e &= (\boldsymbol{y}-\boldsymbol{X}\hat{\boldsymbol{\beta}})'(\boldsymbol{y}-\boldsymbol{X}\hat{\boldsymbol{\beta}})
+\end{align*}
+
+
+Here, $\sigma^2_0$ is a prior estimate of the parameter of interest $\sigma^2$.
+
+## Linear Model in `STAN` Code
+
+\small 
+
+```
+data {
+  int<lower=0> n;   // Number of observations
+  int<lower=0> K;   // Number of predictors
+  matrix[n, K] x;   // Matrix of predictors
+  vector[n] y;      // Response vector
+}
+parameters {
+  vector[K] beta;       // Coefficients
+  real<lower=0> sigma2; // Error variance
+}
+model {
+  to_vector(beta) ~ normal(0, 1000); // Prior for coefficients
+  sigma2 ~ inv_gamma(0.0001, 0.0001); // Prior for error variance
+  y ~ normal(x * beta, sqrt(sigma2));  // Likelihood
+}
+generated quantities {
+    real ypred[n];  // Vector of length n for predictions
+    ypred = normal_rng(x * beta, sqrt(sigma2));
+}
+```
+
+
+
+## Estimation Process in `STAN`
+
+Let's assume $Y$ represents the logarithm of average income by administrative division of the country.
+
+```{r, echo=FALSE}
+datalm <- readRDS("www/00_Intro_bayes/Modelo/01_dataRegresion.rds") %>%
+  filter(!is.na(logingreso))
+```
+
+```{r, echo=FALSE}
+tba(datalm[, 1:5] %>% head(10), cap = "Logarithm of Income")
+```
+
+## Variable Associations
+
+```{r, echo=FALSE}
+tab_cor <- readRDS("www/00_Intro_bayes/Modelo/02_tabla_cor.rds")
+tba(tab_cor, cap = "Correlation with Logarithm of Income")
+```
+
+## Preparing the `STAN` Code
+
+Organizing Data for `STAN`
+
+```{r, eval=FALSE}
+fitLm2 <- "www/00_Intro_bayes/Modelo/03_ModeloLm.stan"
+
+Xdat <- model.matrix(
+  logingreso ~ luces_nocturnas +
+    cubrimiento_cultivo + cubrimiento_urbano +
+    modificacion_humana, data = datalm)
+
+sample_data <- list(n = nrow(datalm),
+                    K = ncol(Xdat),
+                    x = as.matrix(Xdat),
+                    y = datalm$logingreso)
+```
+
+## Preparing Data for the `STAN` Code
+
+This code section is preparing and organizing data for a Bayesian linear regression model in `STAN`. The data contains information about income and related variables. The model will estimate the coefficients and other parameters to describe the relationship between income and the given variables. The results are saved in an `RDS` file for later analysis and interpretation.
+
+```{r, eval=FALSE}
+
+model_fitLm2 <-
+  stan(
+    file = fitLm2,
+    data = sample_data,
+    warmup = 500,
+    iter = 1000,
+    verbose = FALSE,
+    cores = 4
+  )
+
+saveRDS(model_fitLm2,
+           "www/00_Intro_bayes/Modelo/model_fitLm2.rds")
+```
+
+## Results of the Parameter Estimation for $\beta$ and $\sigma^2$
+
+```{r, eval=FALSE}
+tabla_coef <- summary(model_fitLm2, 
+        pars = c("beta", "sigma2"))$summary
+```
+
+\small 
+
+```{r, echo=FALSE}
+tabla_coef <- readRDS("www/00_Intro_bayes/Modelo/04_tabla_coef.rds")
+tabla_coef %>% tba() 
+```
+
+## Convergence of Chains for Parameter $\theta$
+
+```{r,eval=FALSE, echo=FALSE}
+posterior_beta <- as.array(model_fitLm2,
+ pars = c("beta[2]","beta[3]","beta[4]"))
+
+(mcmc_dens_chains(posterior_beta) +
+    mcmc_areas(posterior_beta) ) / 
+  mcmc_trace(posterior_beta)
+
+```
+
+```{r echo=FALSE, out.width = "600px", out.height="250px",fig.align='center', fig.cap="Chains for beta"}
+knitr::include_graphics("www/00_Intro_bayes/Modelo/05_cadenas_beta.png")
+```
+
+## Convergence of Chains for Parameter $\sigma^2$
+
+```{r,eval=FALSE, echo=FALSE}
+posterior_sigma2 <- as.array(model_fitLm2, pars = "sigma2")
+(mcmc_dens_chains(posterior_sigma2) +
+    mcmc_areas(posterior_sigma2) ) / 
+  mcmc_trace(posterior_sigma2)
+```
+
+```{r echo=FALSE, out.width = "600px", out.height="250px",fig.align='center', fig.cap="Chains for sigma2"}
+knitr::include_graphics("www/00_Intro_bayes/Modelo/06_cadenas_sigma.png")
+```
+
+## Posterior Predictive Check for Income
+
+
+```{r,eval=FALSE}
+
+y_pred_B <- as.array(model_fitLm2, pars = "ypred") %>%
+  as_draws_matrix()
+
+rowsrandom <- sample(nrow(y_pred_B), 100)
+
+log_pred2 <- y_pred_B[rowsrandom,]
+y_pred2 <- exp(log_pred2)-1
+
+ppc_dens_overlay(
+  y = datalm$logingreso, log_pred2)/
+ppc_dens_overlay(
+  y = as.numeric(exp(datalm$logingreso) - 1), y_pred2) + 
+  xlim(0, 800000)
+```
+
+## Posterior Predictive Check for Income
+
+```{r echo=FALSE, out.width = "450px", out.height="250px",fig.align='center', fig.cap="Posterior Predictive Check for Income"}
+knitr::include_graphics("www/00_Intro_bayes/Modelo/07_ppc_ingreso.png")
+```
+
+
+# Use of SAE Methods
+
+## Justification
+
+- Direct estimators, based solely on observed sampling units for each small area, are not reliable enough.
+
+- Small sample size or even no observed units (lack of information).
+
+- The coefficient of variation (CV) is too high for the target indicator at the area level.
+
+## Increase in the Coefficient of Variation
+
+```{r echo=FALSE, out.width = "400px", out.height="250px",fig.align='center', fig.cap= "Distribution of coefficients of variation in Chile"}
+include_graphics("www/F_03_incremento_cv.PNG")
+```
+
+## Justification
+
+When direct estimators are not reliable for some domains of interest, there are two options:
+
+1. Oversampling: increasing the sample size in the domains of interest (increased costs).
+
+2. Applying statistical techniques that allow reliable estimations in those domains, Small Area Estimation (SAE) methods.
+
+## What Is a Small Area?
+
+- Most national surveys are planned to provide reliable estimates at the national and regional levels, but precision decreases at lower levels.
+
+- A small area is a domain for which the specific sample size is not large enough to obtain reliable estimates.
+
+- Typically, small areas are unplanned domains, and their expected sample size is random and larger as the area's population size increases.
+
+## What Is a Small Area?
+
+The subpopulation of interest can be a geographic area or specific socioeconomic subgroups.
+
+- Geographic: provinces, labor market areas, municipalities, census tracts, to measure, for example, the unemployment rate at the municipal level.
+
+- Subgroups specific domains: age × gender × race within the geographic scope of an area, to measure, for example, the unemployment rate by specific gender or age in urban areas.
+
+## Some Methods
+
+- SAE estimators are divided into two main types depending on how models are applied to the data within small areas: area level and unit level.
+
+- Small area estimators are based on area-level calculations if the models link the target variable y with specific area-specific auxiliary variables x.# Use of SAE Methods
+
+## Justification
+
+- Direct estimators, based solely on observed sampling units for each small area, are not reliable enough.
+
+- Small sample size or even no observed units (lack of information).
+
+- The coefficient of variation (CV) is too high for the target indicator at the area level.
+
+## Increase in the Coefficient of Variation
+
+```{r echo=FALSE, out.width = "400px", out.height="250px",fig.align='center', fig.cap= "Distribution of coefficients of variation in Chile"}
+include_graphics("www/F_03_incremento_cv.PNG")
+```
+
+## Justification
+
+When direct estimators are not reliable for some domains of interest, there are two options:
+
+1. Oversampling: increasing the sample size in the domains of interest (increased costs).
+
+2. Applying statistical techniques that allow reliable estimations in those domains, Small Area Estimation (SAE) methods.
+
+## What Is a Small Area?
+
+- Most national surveys are planned to provide reliable estimates at the national and regional levels, but precision decreases at lower levels.
+
+- A small area is a domain for which the specific sample size is not large enough to obtain reliable estimates.
+
+- Typically, small areas are unplanned domains, and their expected sample size is random and larger as the area's population size increases.
+
+## What Is a Small Area?
+
+The subpopulation of interest can be a geographic area or specific socioeconomic subgroups.
+
+- Geographic: provinces, labor market areas, municipalities, census tracts, to measure, for example, the unemployment rate at the municipal level.
+
+- Subgroups specific domains: age $\times$ gender $\times$ race within the geographic scope of an area, to measure, for example, the unemployment rate by specific gender or age in urban areas.
+
+## Some Methods
+
+- SAE estimators are divided into two main types depending on how models are applied to the data within small areas: area level and unit level.
+
+- Small area estimators are based on area-level calculations if the models link the target variable y with specific area-specific auxiliary variables x.
+
+## Some Methods
+
+- They are called unit-level models if individual values for specific unit-specific auxiliary variables are linked.
+
+- Small area estimators are calculated at the area level if unit-level data is not available.
+
+- They can also be calculated if unit-level data is available by summarizing them at the appropriate area level.
+
+## Estimation Process
+
+```{r echo=FALSE, out.width = "400px", out.height="250px",fig.align='center', fig.cap= "Producing Statistics with SAE"}
+include_graphics("www/F_04_flujo_sae.PNG")
+```
+
+## Considerations
+
+- All SAE methods require small area-level auxiliary data from which they borrow strength.
+
+- The effectiveness of SAE methods depends on the degree of association between the target variable and the auxiliary data.
+
+- The search for good auxiliary variables is critical, including imaginative construction of such variables.
+
+- Auxiliary data must be measured consistently across small areas but can include large sample estimates with known sampling error.
+
+## Challenges
+
+- Increasing non-response rates.
+
+- Rising costs, less funding.
+
+- Increasing demand for estimates for small domains such as race, ethnicity, or poverty.
+
+- Increasing demand for small area estimates.
+
+- Increasing complexity in survey contents and therefore response burden.
+
+- Increasing demand for secondary analyses, public use, and restricted-use data files.
+
+
+# Generalized Variance Function (GVF)
+
+## What is the importance of the Generalized Variance Function?
+
+- The variance of the direct estimator is a crucial input in the area model.
+
+- It is not possible to calculate the variance of the direct estimator at the domain level.
+
+- In domains with very small sample sizes, variance estimates can be unreliable.
+
+- The utility of a variance-smoothing model is suggested.
+
+- The purpose of smoothing is to remove noise and volatility in variance estimates to obtain a more accurate signal of the process.
+
+## The Generalized Variance Function
+
+Hidiroglou (2019) states that: $E_{\mathscr{MP}}\left(\hat{\theta}^{dir}_d\right)=\boldsymbol{x}^{T}_{d}\boldsymbol{\beta}$ and $V_{\mathscr{MP}}\left(\hat{\theta}^{dir}_d\right)=\sigma_{u}^2+\tilde{\sigma}^2_{d}$, where the subscript $\mathscr{MP}$ refers to the double inference that must be taken into account in this type of adjustment.
+
+- $\mathscr{M}$ refers to the probability measure induced by modeling and the inclusion of auxiliary covariates ($\boldsymbol{x}_{d}$).
+
+- $\mathscr{P}$ refers to the probability measure induced by the complex sampling design that induces direct estimates.
+
+
+## Estimation of Sampling Variance
+
+The GVF involves fitting a log-linear model to the estimated direct variance. Starting from the fact that an unbiased estimator of $\sigma^2$, denoted by $\hat{\sigma}^2$, is available, we have:
+
+$$
+E_{\mathscr{MP}}\left(\hat{\sigma}_{d}^{2}\right)=E_{\mathscr{M}}\left(E_{\mathscr{P}}\left(\hat{\sigma}_{d}^{2}\right)\right)=E_{\mathscr{M}}\left(\sigma_{d}^{2}\right)=\tilde{\sigma}_{d}^{2}
+$$
+
+The above equality can be interpreted as an unbiased and simple estimator of $\tilde{\sigma}_{d}^{2}$ can be $\hat{\sigma}_{d}^{2}$. 
+
+## Smoothing Models
+
+Rivest and Belmonte (2000) propose smoothing models to estimate direct variances. These models are defined as follows:
+
+$$
+\log\left(\hat{\sigma}_{d}^{2}\right)=\boldsymbol{z}_{d}^{T}\boldsymbol{\alpha}+\boldsymbol{\varepsilon}_{d}
+$$
+
+Where $\boldsymbol{z}_{d}$ is a vector of explanatory covariates that are functions of $\boldsymbol{x}_{d}$, $\boldsymbol{\alpha}$ is a vector of parameters that need to be estimated, and $\boldsymbol{\varepsilon}_{d}$ are random errors with mean zero and constant variance, which are assumed to be identically distributed conditional on $\boldsymbol{z}_{d}$.
+
+
+## Smooth Estimation
+
+- The smoothed estimation of the sampling variance is given by:
+
+$$
+\tilde{\sigma}_{d}^{2}=E_{\mathscr{MP}}\left(\sigma_{d}^{2}\right)=\exp\left(\boldsymbol{z}_{d}^{T}\boldsymbol{\alpha}\right)\times\Delta
+$$
+
+Where $E_{\mathscr{MP}}\left(\varepsilon_{d}\right)=\Delta$.
+
+- Using the method of moments, we have the following unbiased estimator for $\Delta$:
+
+$$
+\hat{\Delta}=\frac{\sum_{d=1}^{D}\hat{\sigma}_{d}^{2}}{\sum_{d=1}^{D}\exp\left(\boldsymbol{z}_{d}^{T}\boldsymbol{\alpha}\right)}
+$$
+
+## Parameter Estimation
+
+- The estimation of the regression parameter coefficients is given by the following expression:
+
+$$
+\hat{\boldsymbol{\alpha}}=\left(\sum_{d=1}^{D}\boldsymbol{z}_{d}\boldsymbol{z}_{d}^{T}\right)^{-1}\sum_{d=1}^{D}\boldsymbol{z}_{d}\log\left(\hat{\sigma}_{d}^{2}\right)
+$$
+
+- And the smoothed estimator of the sampling variance is defined as:
+
+$$
+\hat{\tilde{\sigma}}_{d}^{2}=\exp\left(\boldsymbol{z}_{d}^{T}\hat{\boldsymbol{\alpha}}\right)\hat{\Delta}
+$$
+
+## Data: Great Integrated Household Survey (GEIH) of Colombia
+
+The 2018 Great Integrated Household Survey (GEIH) in Colombia used a complex sampling design that included stratification of the population into urban and rural areas, along with cluster sampling. The selected sample was significant, allowing the collection of data in a representative manner throughout the country. In total, 98,000 Primary Sampling Units (UPMs) were used to obtain reliable statistics at the National, Geographic Regions, Major Cities, and Urban/Rural Areas, Socioeconomic Strata.
+
+## Data Set
+
+```{r,echo=FALSE}
+table1 <- readRDS("www/01_FGV/01_tabla_encuesta.rds")
+tba(table1, cap = "GEIH Colombia")
+```
+
+## Sampling Design
+
+To define the sampling design from a survey database, we use the `survey` and `srvyr` libraries.
+
+```{r, eval=FALSE}
+library(survey)
+library(srvyr)
+options(survey.lonely.psu = "adjust")
+encuesta <- readRDS("www/01_FGV/encuesta.rds")
+design <-
+  as_survey_design(
+    ids = upm,
+    weights = wkx,
+    strata = estrato,
+    nest = TRUE,
+    .data = encuesta
+  )
+
+```
+
+## Direct Estimates by Domain
+
+For the direct estimation of the proportion, we use the `direct.supr` function, available in the [`0Source_FH.R`](https://github.com/psirusteam/2023COLsae/tree/main/Resources/Day2/Session1/0Resources) file. This function performs estimations and quality criteria in a complex survey sample with stratified and clustered design.
+
+## Selected Domains
+
+- At least 50 observations per domain.
+
+- Design effect (Deff) greater than 1.
+
+- At least 3 degrees of freedom.
+
+```{r, echo=FALSE}
+tabla2 <- readRDS("www/01_FGV/02_tabla.rds")
+tba(tabla2, cap = "Selected Domain Counts")
+```
+
+## FGV for Colombia's GEIH
+
+For this process, the transformation $\log(\hat{\sigma}^2_d)$ is performed, and columns for municipality identifiers (`dam2`), direct estimation (`pobreza`), the number of people in the domain (`nd`), and estimated variance (`vardir`) are selected.
+
+```{r, echo=FALSE}
+baseFGV <- readRDS("www/01_FGV/03_tabla_FGV.rds")
+tabla3 <- baseFGV %>% head(5)
+tba(tabla3, cap = "Data Set for FGV")
+```
+
+## Graphical Analysis
+
+```{r, echo=FALSE, out.width = "500px", out.height="300px",fig.align='center', fig.cap= "Scatterplots"}
+include_graphics("www/01_FGV/04_fig_FGV.png")
+```
+
+## Model for Variance
+
+The model defined for the dataset is as follows:
+
+$$
+\log(\hat{\sigma}^2) = \hat{\theta}_{dir} + n_{d}^2 + \sqrt{\hat{\theta}_{dir}}
+$$
+
+The result of the model is shown below:
+
+```{r, echo=FALSE}
+library(gtsummary)
+mod_fgv <- readRDS("www/01_FGV/05_tabla_modelo_FGV.rds")
+tbl_regression(mod_fgv) %>% 
+  add_glance_table(include = c(r.squared, adj.r.squared) ) %>% 
+  modify_caption("Model Summary")
+```
+
+
+## Estimation of $\Delta$ and Prediction
+
+To obtain the value of the constant $\Delta$ from the model estimation, you can use the following code:
+
+```{r, eval=FALSE}
+delta.hat = sum(baseFGV$vardir) / 
+  sum(exp(fitted.values(mod_fgv)))
+```
+
+Finally, you have the smoothed variance:
+
+```{r, eval=FALSE}
+hat.sigma <- 
+  data.frame(
+    dam2 = baseFGV$dam2,
+    hat_var = delta.hat * exp(fitted.values(mod_fgv)))
+```
+
+## Results Validation
+
+```{r, echo=FALSE, out.width = "400px", out.height="250px",fig.align='center', fig.cap= "FGV and Direct Variance, by Sample Size"}
+include_graphics("www/01_FGV/07_fig_FGV_vs_vardir2.png")
+```
+
+# Area Models
+
+## Fay Herriot Model
+
+- The Fay Herriot Model, proposed by Fay and Herriot in 1979, is widely used in small area estimation. This statistical approach is applied when individual-level information is limited, but data are available at the area level and auxiliary information related to this data is available.
+
+- The model establishes a relationship between area indicators, $\theta_d$, which vary based on a covariate vector $\boldsymbol{x}_d$. It is formulated as $\theta_d = \boldsymbol{x}^{T}_{d}\boldsymbol{\beta} + u_d$, where $u_d$ is a random effect specific to each area.
+
+## Fay Herriot Model
+
+- The real values of the indicators $\theta_d$ are not directly observable, so we use the direct estimator $\hat{\theta}^{DIR}_d$ to estimate them, which introduces sampling error. In other words:
+
+  $$
+  \hat{\theta}_d^{DIR} = \theta + e_d  
+  $$
+
+- The model is adjusted to account for the sampling error $e_d$, and the variances $\sigma^2_{e_d}$ are estimated from the survey's microdata. This adjustment is expressed as:
+
+  $$
+  \hat{\theta}^{DIR}_{d} = \boldsymbol{x}^{T}_{d}\boldsymbol{\beta} + u_d + e_d
+  $$
+
+Here, $\hat{\theta}^{DIR}_{d}$ represents the direct estimate of the indicator in small area $d$, $\boldsymbol{x}_d$ stands for area-specific auxiliary covariates, $\boldsymbol{\beta}$ is the vector of coefficients to be estimated, $u_d$ is a random effect specific to each area, and $e_d$ represents the sampling error. 
+
+
+## Fay Herriot Model  
+
+The Best Linear Unbiased Predictor (BLUP) under the Fay Herriot model is calculated as $\tilde{\theta}_{d}^{FH}$. It is based on the use of $\gamma_d$ to appropriately weight the direct estimator and auxiliary information, allowing for a more precise estimation of the indicators in small areas. The equation for this is as follows:
+
+$$
+\tilde{\theta}_{d}^{FH} = \boldsymbol{x}^{T}_{d}\tilde{\boldsymbol{\beta}}+\tilde{u}_{d}
+$$,
+
+here $\tilde{u}_d = \gamma_d\left(\hat{\theta}^{DIR}_{d} - \boldsymbol{x}^{T}_{d}\tilde{\boldsymbol{\beta}} \right)$ and $\gamma_d=\frac{\sigma^2_u}{\sigma^2_u + \sigma^2_{e_d}}$.
+
+
+## Area Model for Poverty Estimation 
+
+Let $P_d$ be the probability of finding a person in a state of poverty in the $d$-th domain of the population. The direct estimator of $P_d$ can be written as:
+
+$$
+\hat{P}^{DIR}_{d} = P_d + e_d
+$$
+
+Now, $P_d$ can be modeled as follows:
+
+$$
+P_d = \boldsymbol{x}^{T}_{d}\boldsymbol{\beta} + u_d
+$$
+
+## Area Model for Poverty Estimation
+
+Rewriting $\hat{P}^{DIR}_{d}$ in terms of the two equations above, we have:
+
+$$
+\hat{P}^{DIR}_{d} = \boldsymbol{x}^{T}_{d}\boldsymbol{\beta} + u_d + e_d
+$$
+
+Now, we can assume that:
+
+-   $\hat{P}^{DIR}_d \sim N(\boldsymbol{x}^{T}_{d}\boldsymbol \beta, \sigma_u^2 +\sigma_{e_d}^2)$,
+
+-   $\hat{P}^{DIR}_d \mid u_d \sim N(\boldsymbol{x}^{T}_{d}\boldsymbol \beta + u_d,\sigma_{e_d}^2)$ and
+
+-   $u_d \sim N(0, \sigma^2_u)$
+
+## Prior Distributions
+
+The prior distributions for $\boldsymbol{\beta}$ and $\sigma^2_u$ are as follows:
+
+$$
+\beta_p  \sim  N(0, 10000)
+$$
+
+$$
+\sigma^2_u \sim  Inverse-Gamma(0.0001, 0.0001)
+$$
+
+Therefore, the Bayesian estimator for $P_d$ is given as $\tilde{P}_d = E\left(P_d\mid\hat{P}_d^{DIR}\right)$
+
+
+## Procedure for Estimating Poverty in Colombian Municipalities
+
+The available covariables are shown in the following table, which has been obtained previously.
+
+```{r,echo=FALSE}
+tabla1 <- readRDS("www/02_FH_Nornal/01_tabla_predictors.rds") %>% head(5)
+tba(tabla1[,1:8], cap = "Available Covariables")
+```
+
+## FH Model: `STAN` Routine
+
+```
+data {
+  int<lower=0> N1; // number of data items
+  int<lower=0> N2; // number of data items for prediction
+  int<lower=0> p;  // number of predictors
+  matrix[N1, p] X; // predictor matrix
+  matrix[N2, p] Xs; // predictor matrix
+  vector[N1] y;    // predictor matrix 
+  vector[N1] sigma_e; // known variances
+}
+
+parameters {
+  vector[p] beta;       // coefficients for predictors
+  real<lower=0> sigma2_u;
+  vector[N1] u;
+}
+```
+
+## FH Model: `STAN` Routine
+
+```
+transformed parameters{
+  vector[N1] theta;
+  vector[N1] thetaSyn;
+  vector[N1] thetaFH;
+  vector[N1] gammaj;
+  real<lower=0> sigma_u;
+  thetaSyn = X * beta;
+  theta = thetaSyn + u;
+  sigma_u = sqrt(sigma2_u);
+  gammaj =  to_vector(sigma_u ./ (sigma_u + sigma_e));
+  thetaFH = (gammaj) .* y + (1-gammaj).*thetaSyn; 
+}
+```
+
+## FH Model: `STAN` Routine
+
+```
+model {
+  // likelihood
+  y ~ normal(theta, sigma_e); 
+  // priors
+  beta ~ normal(0, 100);
+  u ~ normal(0, sigma_u);
+  sigma2_u ~ inv_gamma(0.0001, 0.0001);
+}
+
+generated quantities{
+  vector[N2] y_pred;
+  for(j in 1:N2) {
+    y_pred[j] = normal_rng(Xs[j] * beta, sigma_u);
+  }
+}
+```
+
+## Preparing Inputs for `STAN`
+
+- Defining the area model.
+
+```{r}
+formula_mod  <- formula(
+  ~ gender2 + year_est2 + year_est3 +
+    year_est4 + age2 + age3  +  age4  + age5 + ethnicity1 +
+    ethnicity2 + unemployment_rate + nighttime_lights +
+    crop_coverage + albedo
+)
+```
+
+## Preparing Inputs for `STAN`
+
+- Split the database into observed and unobserved domains.
+
+```{r, eval=FALSE}
+# Observed domains.
+data_dir <- base_FH %>% filter(!is.na(poverty))
+
+Xdat <- model.matrix(formula_mod, data = data_dir)
+
+# Unobserved domains.
+data_syn <-
+  base_FH %>% anti_join(data_dir %>% select(dam2))
+
+Xs <- model.matrix(formula_mod, data = data_syn)
+```
+
+## Preparing Inputs for `STAN`
+
+- Creating a parameter list for `STAN`.
+
+```{r, eval=FALSE}
+sample_data <- list(
+  N1 = nrow(Xdat),   # Observed.
+  N2 = nrow(Xs),   # Unobserved.
+  p  = ncol(Xdat),       # Number of predictors.
+  X  = as.matrix(Xdat),  # Observed Covariates.
+  Xs = as.matrix(Xs),    # Unobserved Covariates
+  y  = as.numeric(data_dir$poverty), # Direct estimation
+  sigma_e = sqrt(data_dir$hat_var)   # Estimation error
+)
+```
+## Compiling the Model in `STAN`
+
+Here's how to compile the `STAN` code from R.
+
+```{r, eval=FALSE}
+library(rstan)
+fit_FH_normal <- "www/02_FH_Nornal/17FH_normal.stan"
+options(mc.cores = parallel::detectCores())
+model_FH_normal <- stan(
+  file = fit_FH_normal,  
+  data = sample_data,   
+  verbose = FALSE,
+  warmup = 500,         
+  iter = 1000,            
+  cores = 4              
+)
+saveRDS(object = model_FH_normal,
+        file = "www/02_FH_Nornal/model_FH_normal.rds")
+```
+
+## Results of the Model for Observed Domains
+
+Using the `ppc_dens_overlay()` function to plot a comparison between the empirical distribution of the observed poverty variable in the data and the simulated posterior predictive distributions for the same variable.
+
+```{r, eval=FALSE}
+y_pred_B <- as.array(model_FH_normal,
+                     pars = "theta") %>%
+  as_draws_matrix()
+
+rowsrandom <- sample(nrow(y_pred_B), 100)
+
+y_pred2 <- y_pred_B[rowsrandom,]
+
+ppc_dens_overlay(y = as.numeric(data_dir$poverty),
+                 y_pred2)
+```
+
+
+## Posterior Predictive Check
+
+```{r echo=FALSE, out.width = "400px", out.height="250px",  fig.cap= "PPC for poverty"}
+knitr::include_graphics("www/02_FH_Nornal/02_Fig_FH1.png")
+```
+
+## Validation of Chains Convergence $\sigma^2$
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "Chain Convergence"}
+knitr::include_graphics("www/02_FH_Nornal/03_Fig_FH2.png")
+```
+
+## Comparison of Estimates
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "Comparison between the model equations and the gamma weights"}
+knitr::include_graphics("www/02_FH_Nornal/04_Fig_FH3.png")
+```
+
+## Benchmarking Process
+
+- Extract the total number of people by DAM2 from the census.
+
+```{r, echo=FALSE}
+total_pp <- readRDS(file = "www/02_FH_Nornal/06_tabla_total_personas.rds")
+
+N_dam_pp <- total_pp %>%   ungroup() %>%  
+            mutate(dam_pp = sum(total_pp) ) 
+
+tba(N_dam_pp %>% slice(1:10))
+```
+
+## Direct Estimation
+
+Obtain direct estimates by DAM or the level of aggregation for which the survey is representative.
+
+```{r, eval=FALSE}
+directoDam <- diseno %>% 
+   group_by(Aggregated = "National") %>% 
+  summarise(
+    theta_dir = survey_mean(poverty, vartype = c("ci"))
+    )
+
+```
+
+```{r,echo=FALSE}
+directoDam <- readRDS("www/02_FH_Nornal/07_tabla_estimacionDir.rds")
+tba(directoDam)
+```
+
+
+## Calculation of Weights
+
+After organizing the above information, the weights for benchmarking are calculated.
+
+```{r, eval=FALSE}
+estimationsPre <-
+  readRDS("www/02_FH_Nornal/05_tabla_estimacionesPre.rds")
+temp <- estimationsPre %>%
+  inner_join(N_dam_pp) %>%
+  mutate(theta_dir = directoDam$theta_dir)
+R_dam2 <- temp %>%
+  summarise(
+    R_dam_RB = unique(theta_dir) /
+      sum((total_pp  / dam_pp) * theta_pred))
+
+```
+
+```{r, echo=FALSE}
+weight_table <-
+  readRDS("www/02_FH_Nornal/08_tabla_peso.rds")
+tba(weight_table)
+```
+
+## Estimation with the area model after Benchmarking
+
+```{r, eval=FALSE}
+weights <- temp %>% 
+  mutate(W_i = total_pp / dam_pp) %>% 
+  select(dam2, W_i)
+
+estimationsBench <- estimationsPre %>%
+  mutate(R_dam_RB = R_dam2$R_dam_RB) %>%
+  mutate(theta_pred_RBench = R_dam_RB * theta_pred) %>%
+  select(dam, dam2, theta_pred, theta_pred_RBench)
+```
+
+```{r, echo=FALSE}
+ estimationsBench <- 
+  readRDS("www/02_FH_Nornal/09_tabla_estimacionesBench.rds")
+tba(estimationsBench %>% slice(1:3))
+```
+
+## Validation of the Results
+
+This code combines the model estimates with benchmarking weights with observed and synthetic values and then summarizes the combined estimates to compare them with the direct estimation obtained earlier.
+
+```{r, eval=FALSE}
+temp <- estimationsBench %>% 
+  left_join(estimationsPre) %>%
+  summarise(
+    thetaSyn = sum(W_i * thetaSyn),
+    thetaFH = sum(W_i * theta_pred),
+    theta_RBench = sum(W_i * theta_pred_RBench)
+  ) %>%
+  mutate(
+    theta_dir = directoDam$theta_dir,
+    theta_dir_low = directoDam$theta_dir_low,
+    theta_dir_upp = directoDam$theta_dir_upp
+  )
+```
+
+## Validation Result
+
+```{r,echo=FALSE}
+validation_table <- readRDS(
+  "www/02_FH_Nornal//10_tabla_valida.rds")
+tba(validation_table, cap = "Comparison of Estimations")
+```
+
+## Result of the Area Model Estimation
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "Poverty Map"}
+knitr::include_graphics("www/02_FH_Nornal/11_Mapa_pobreza.PNG")
+```
+
+
+## Area Model: Arcsine Transformation
+
+- In the Fay-Herriot model, the linear combination of covariates can generate values that are outside the acceptable range for a proportion.
+
+- To address this, an arcsine transformation is applied to the estimators: $\hat{z}_d = \arcsin\left( \sqrt{ \hat{\theta}_d} \right)$.
+
+
+- The variance of the arcsine transformation is related to the design effect factor (DEFF) and the effective sample size:
+
+$$Var\left( \hat{z}_d \right) = \frac{\widehat{DEFF}_d}{4\times n_d} = \frac{1}{4\times n_{d,efective} }$$.
+
+## Specification of the Fay-Herriot Model
+
+   - The Fay-Herriot model is defined with a latent variable $Z_d$ that follows a normal distribution.
+   - The mean of $Z_d$ ($\mu_d$) is related to the covariates through $\boldsymbol{x}^{T}_{d}\boldsymbol{\beta} + u_d$.
+
+   - The relationship between the latent variable $\theta_d$ and the direct estimator is established as $\theta_d =  \left(\sin(\mu_d)\right)^2$.
+
+This can be simplified as:
+
+```{=tex}
+\begin{eqnarray*}
+Z_{d}\mid\mu_{d},\sigma_{d}^{2} & \sim & N\left(\mu_{d},\sigma_{d}^{2}\right)\\
+\mu_{d} & = & \boldsymbol{x}_{d}^{T}\boldsymbol{\beta}+u_{d}\\
+\theta_{d} & = & \left(\sin(\mu_{d})\right)^{2}
+\end{eqnarray*}
+
+```
+
+
+
+## Prior Distributions
+
+Prior distributions are specified for the model parameters:
+
+- $\boldsymbol{\beta} \sim N\left(0,1000 \right)$
+     
+- $\sigma_{u}^{2} \sim Inverse-Gamma\left(0.0001,0.0001\right)$.
+     
+     
+## Area Model: STAN Routine
+
+The code is similar to the previous one, with the following variations:
+
+::::  {.columns align=top .onlytextwidth}
+
+::: {.column width="50%" align=center}
+
+```
+transformed parameters{
+  vector[N1] theta;
+  vector[N1] lp;
+  real<lower=0> sigma_u;
+  lp = X * beta + u;
+  sigma_u = sqrt(sigma2_u);
+  for(k in 1:N1){
+    theta[k] = pow(sin(lp[k]), 2);
+  }
+}
+```
+:::
+
+::: {.column width="50%" align=center}
+
+```
+
+model {
+  // likelihood
+  y ~ normal(lp, sigma_e); 
+  // priors
+  beta ~ normal(0, 100);
+  u ~ normal(0, sigma_u);
+  sigma2_u ~ inv_gamma(0.0001, 0.0001);
+}
+
+```
+:::
+
+:::: 
+
+## Estimation Procedure
+
+For the previously prepared dataset, you need to select and transform the columns of interest.
+
+```{r, eval=FALSE}
+statelevel_predictors_df <- 
+  readRDS("www/03_FH_Arcsin/statelevel_predictors.rds")
+base_FH <- readRDS("www/03_FH_Arcsin/base_FH_2018.rds") %>% 
+  transmute(
+    dam2,                             # domain IDs
+    pobreza,
+    T_pobreza = asin(sqrt(pobreza)),  # creating zd
+    n_effec = n_eff_FGV,              # effective sample size
+    varhat = 1/(4*n_effec)            # variance for zd
+    )
+
+```
+
+## Preparing Inputs for `STAN`
+
+Selecting the covariates, which correspond to the previously selected ones.
+
+```{r, eval=FALSE} 
+base_FH <- full_join(base_FH, 
+           statelevel_predictors_df, by = "dam2" )
+
+names_cov <- c(
+  "sexo2" , "anoest2" , "anoest3",   "anoest4",
+  "edad2" , "edad3" , "edad4" , "edad5" , "etnia1",
+  "etnia2" ,  "tasa_desocupacion" , "luces_nocturnas" ,
+  "cubrimiento_cultivo" , "alfabeta"
+)
+```
+
+## Dividing the Dataset
+
+The estimation and prediction process is done separately within `STAN`
+
+- Observed domains.
+```{r, eval=FALSE}
+data_dir <- base_FH %>% filter(!is.na(T_pobreza))
+Xdat <- cbind(inter = 1, data_dir[, names_cov])
+```
+
+- Unobserved domains.
+
+```{r, eval=FALSE}
+data_syn <-
+  base_FH %>% anti_join(data_dir %>% select(dam2))
+Xs <- cbind(inter = 1, data_syn[, names_cov])
+```
+
+## Parameter List for STAN
+
+STAN's processing engine is based on C++, which is why the arguments to run the code need to be entered as a list.
+
+```{r, eval=FALSE}
+sample_data <- list(
+  N1 = nrow(Xdat),       # Observed.
+  N2 = nrow(Xs),         # Unobserved.
+  p  = ncol(Xdat),       # Number of regressors.
+  X  = as.matrix(Xdat),  # Observed Covariates.
+  Xs = as.matrix(Xs),    # Unobserved Covariates.
+  y  = as.numeric(data_dir$T_pobreza),
+  sigma_e = sqrt(data_dir$varhat)
+)
+```
+
+## Compiling the Model in STAN
+
+```{r, eval=FALSE}
+fit_FH_arcoseno <- 
+  "www/03_FH_Arcsin/15FH_arcsin_normal.stan"
+
+model_FH_arcoseno <- stan(
+  file = fit_FH_arcoseno,  
+  data = sample_data,   
+  verbose = FALSE,
+  warmup = 500,         
+  iter = 1000,            
+  cores = 4              
+)
+saveRDS(model_FH_arcoseno,
+        "www/03_FH_Arcsin/model_FH_arcoseno.rds")
+
+```
+
+
+## Results for Observed Domains
+
+Similar to the Fay Herriot model, we perform the graph with posterior predictive checking.
+
+```{r echo=FALSE, out.width = "400px", out.height = "250px", fig.cap = "PPC for the Arcsine Area Model"}
+knitr::include_graphics("www/03_FH_Arcsin/01_Fig_FH_Asin.png")
+```
+
+## Graphical Analysis of Chain Convergence for $\sigma^2_u$
+
+```{r echo=FALSE, out.width = "400px", out.height = "250px", fig.cap = "Chain Trace"}
+knitr::include_graphics("www/03_FH_Arcsin/02_Fig_FH_Asin2.png")
+```
+
+## Poverty Map with Arcsine Transformation
+
+```{r echo=FALSE, out.width = "500px", out.height = "400px", fig.cap = "Poverty Map with Arcsine Transformation"}
+knitr::include_graphics("www/03_FH_Arcsin/03_Fig_Mapa_arcoseno.PNG")
+```
+
+## Map of Poverty Coefficients of Variation
+
+```{r echo=FALSE, out.width = "500px", out.height = "400px", fig.cap = "Map of Coefficients of Variation"}
+knitr::include_graphics("www/03_FH_Arcsin/04_Fig_Mapa_arcoseno_cv.PNG")
+```
+
+## Area Models with Beta Response Variable
+
+The beta-logistic model was initially introduced in the context of an Empirical Best Prediction (EBP) approach by Jiang and Lahiri in 2006. It was used to estimate domain means in finite populations.
+
+- The area beta-logistic model is defined through the following expression:
+
+     $$\hat{p}_{d} \mid P_d \sim beta(a_d, b_d)$$.
+
+- The link function is related to the model parameters:
+
+    $$logit(P_{d}) \mid \boldsymbol{\beta}, \sigma^2_u  \sim  N(\boldsymbol{x}_d^T\boldsymbol{\beta},\sigma^2_u)$$.
+
+## Parameter Estimation
+
+  - The parameters $a_d$ and $b_d$ are estimated as follows:
+  
+```{=tex}
+\begin{eqnarray*}
+a_d &=& P_d \times \phi_d\\
+b_d &=& (1 - P_d) \times \phi_d
+\end{eqnarray*}
+
+```
+    
+   Where $\phi_d = \frac{n_d}{\widehat{DEFF}_d} -1 = n_{d,efectivo} -1$.
+
+- Prior distributions are specified for the model parameters:
+
+     $$\beta_k \sim N(0, 10000)$$
+     
+     $$\sigma^2_u \sim Inverse-Gamma(0.0001, 0.0001)$$.
+    
+    
+## Area Model: STAN Routine
+In this code block, we can see the transformation performed on the input parameters.
+
+```
+transformed parameters{
+  vector[N1] LP;
+  real<lower=0> sigma_u;
+  vector[N1] theta;           
+  LP = X * beta + u;
+  sigma_u = sqrt(sigma2_u); 
+  for (i in 1:N1) { 
+    theta[i] = inv_logit(LP[i]); 
+  }
+}
+```
+
+## FH Model: STAN Routine
+
+```
+model {
+  // model calculations
+  vector[N1] a;                       
+  vector[N1] b;                       
+
+  for (i in 1:N1) { 
+    a[i] = theta[i] * phi[i];
+    b[i] = (1 - theta[i]) * phi[i];
+  }
+
+  // priors
+  beta ~ normal(0, 100);
+  u ~ normal(0, sigma_u);
+  sigma2_u ~ inv_gamma(0.0001, 0.0001);
+
+  // likelihood
+  y ~ beta(a, b);
+}
+```
+
+
+## Estimation Procedure
+
+Similar to the previous models, we use the base that was prepared in advance.
+
+```{r, eval=FALSE}
+base_FH <-
+readRDS("www/04_FH_Beta_y_Binomial/base_FH_2018.rds") %>%
+  select(dam2, pobreza, n_eff_FGV)
+
+base_FH <- full_join(base_FH,
+             statelevel_predictors_df, by = "dam2")
+```
+
+The covariates are the same as those used in the previous models.
+
+## Splitting the Dataset
+
+The estimation and prediction processes are done separately within STAN.
+
+- Observed domains.
+
+```{r, eval=FALSE}
+data_dir <- base_FH %>% filter(!is.na(T_pobreza))
+Xdat <- cbind(inter = 1, data_dir[,names_cov])
+```
+
+- Unobserved domains.
+
+```{r, eval=FALSE}
+data_syn <-
+  base_FH %>% anti_join(data_dir %>% select(dam2))
+Xs <-  cbind(inter = 1, data_syn[,names_cov])
+```
+
+## List of Parameters for STAN
+
+
+```{r, eval=FALSE}
+sample_data <- list(
+  N1 = nrow(Xdat),   # Observed.
+  N2 = nrow(Xs),   # Unobserved.
+  p  = ncol(Xdat),       # Number of predictors.
+  X  = as.matrix(Xdat),  # Observed covariates.
+  Xs = as.matrix(Xs),    # Unobserved covariates
+  y  = as.numeric(data_dir$pobreza),
+  phi = data_dir$n_eff_FGV - 1 
+)
+```
+
+## Compiling the Model in STAN
+
+```{r, eval=FALSE}
+
+fit_FH_beta_logitic <-
+  "www/04_FH_Beta_y_Binomial/16FH_beta_logitc.stan"
+
+model_FH_beta_logitic <- stan(
+  file = fit_FH_beta_logitic,  
+  data = sample_data,   
+  verbose = FALSE,
+  warmup = 500,         
+  iter = 1000,            
+  cores = 4              
+)
+saveRDS(model_FH_beta_logitic, 
+file = "www/04_FH_Beta_y_Binomial/model_FH_beta.rds")
+
+```
+
+
+## Results of the Model for Observed Domains
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "PPC Beta Response Area Model"}
+knitr::include_graphics("www/04_FH_Beta_y_Binomial/01_Fig_ppc.png")
+```
+
+## Graphical Analysis of Chain Convergence for $\sigma^2_u$
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "Chain Trace"}
+knitr::include_graphics("www/04_FH_Beta_y_Binomial/02_Fig_sigma.png")
+```
+
+## Poverty Map with Beta Response Area Model
+
+```{r echo=FALSE, out.width = "500px", out.height="400px", fig.cap= "Poverty Map with Beta Response Area Model"}
+knitr::include_graphics("www/04_FH_Beta_y_Binomial/03_Fig_Mapa_Beta.png")
+```
+
+## Map of Coefficients of Variation for Poverty
+
+```{r echo=FALSE, out.width = "400px", out.height="400px", fig.cap= "Coefficient of Variation Map"}
+knitr::include_graphics("www/04_FH_Beta_y_Binomial/04_Fig_Mapa_Beta_cv.png")
+```
+
+
+## Area Models with Binomial Response Variable
+
+- The Fay-Herriot area model can be substituted by a Generalized Linear Mixed Model (GLMM) when the observed data is inherently discrete, such as counts of individuals or households with certain characteristics.
+
+- In a GLMM, a binomial distribution is assumed for the data $Y_d$ with a success probability $\theta_d$. A logistic model is used for $\theta_d$ with normally distributed errors on the logit scale.
+
+## Model Formulation
+
+The model is formulated as follows:
+
+```{=tex}
+\begin{eqnarray*}
+Y_d \mid \theta_d, n_d & \sim & Binomial(n_d, \theta_d)\\
+logit\left(\theta_{d}\right)&=&\log\left(\frac{\theta_{d}}{1-\theta_{d}}\right)  =  \boldsymbol{x}_{d}^{T}\boldsymbol{\beta}+u_{d}
+\end{eqnarray*}
+
+```
+
+
+Where $u_{d}$ follows a normal distribution with mean zero and variance $\sigma_{u}^{2}$, and $n_{d}$ represents the sample size for area $d$.
+
+## Considerations for the Model
+
+For complex samples, two problems arise:
+
+- The values of $Y_d$ are not integers and are affected by survey weights.
+- The sample variance in the binomial distribution is not accurate.
+
+## Proposal by Carolina Franco
+
+- An **effective sample size** $\tilde{n}_d$ and an **effective sample size of successes** $\tilde{Y_d}$ are introduced to address these issues and maintain the direct estimation of poverty and its corresponding variance.
+
+- Given this, it is possible to assume that
+$$
+\tilde{n}_{d}  \sim  \frac{\check{\theta}_{d}\left(1-\check{\theta}_{d}\right)}{\widehat{Var}\left(\hat{\theta}_{d}\right)}
+$$
+where $\check{\theta}_{d}$ is a preliminary prediction based on the model for the population proportion, $\hat{\theta}_i$ is the direct estimation, and $\widehat{Var}(\hat{\theta}_d)$ is the estimation of the sampling variance.
+
+- Then, it is assumed that $\tilde{n}_{d}$ is proportional to the adjusted variance, and $\tilde{Y}_{d}=\tilde{n}_{d}\times\hat{\theta}_{d}$.
+
+## Prior Distributions
+
+Prior distributions for the parameters $\boldsymbol{\beta}$ and $\sigma_{u}^{2}$ are specified as follows:
+
+$$\boldsymbol{\beta} \sim N(0,10000)$$
+
+$$\sigma_{u}^{2} \sim Inverse-Gamma(0.0001,0.0001)$$
+
+## Area Model: `STAN` Routine
+
+In this code block, we see the transformation applied to the input parameters.
+
+```
+transformed parameters {
+   vector[N1] LP;
+   vector[N1] theta;
+   real<lower=0> sigma_u;
+  
+   sigma_u = sqrt(sigma2_u); 
+   LP = X * beta + u;
+   theta = inv_logit(LP);
+}
+```
+
+## FH Model: `STAN` Routine
+
+```
+model {
+  to_vector(beta) ~ normal(0, 10000);
+  u ~ normal(0, sigma_u);
+  sigma2_u ~ cauchy(0, 1000);
+  for(ii in 1:N1){
+    y_effect[ii] ~ binomial(n_effec[ii], theta[ii]);
+  }
+}
+
+generated quantities {
+  real ypred[N2];
+  vector[N2] thetaLP;
+  vector[N2] LP_pred;
+  LP_pred = Xs * beta;
+  thetaLP = inv_logit(LP_pred);
+}
+```
+
+## Estimation Procedure
+
+Reading the database with direct estimates.
+
+```{r, eval=FALSE}
+base_FH <-
+readRDS("www/04_FH_Beta_y_Binomial/base_FH_2018.rds") %>%
+  select(dam2, pobreza, n_eff_FGV)
+
+base_FH <- full_join(base_FH,
+             statelevel_predictors_df, by = "dam2")
+```
+
+**The covariates are the same as those used in previous models.**  
+
+## Data Splitting
+
+The estimation and prediction process is performed separately within `STAN`.
+
+- Observed domains.
+
+```{r, eval=FALSE}
+data_dir <- base_FH %>% filter(!is.na(T_pobreza))
+Xdat <- cbind(inter = 1,data_dir[,names_cov])
+```
+
+- Unobserved domains.
+
+```{r, eval=FALSE}
+data_syn <-
+  base_FH %>% anti_join(data_dir %>% select(dam2))
+Xs <-  cbind(inter = 1,data_syn[,names_cov])
+```
+
+## Obtaining Additional Parameters
+
+- Effective sample size $\tilde{n}_d$
+
+```{r, eval=FALSE}
+n_effec = round(data_dir$n_eff_FGV)
+```
+
+- Effective number of successful samples $\tilde{Y_d}$
+
+```{r, eval=FALSE}
+y_effect = round((data_dir$pobreza) * n_effec)
+```
+
+
+## List of Parameters for `STAN`
+
+```{r, eval=FALSE}
+sample_data <- list(
+  N1 = nrow(Xdat),   # Observed.
+  N2 = nrow(Xs),     # Unobserved.
+  p = ncol(Xdat),    # Number of predictors.
+  X = as.matrix(Xdat),  # Observed Covariates.
+  Xs = as.matrix(Xs),    # Unobserved Covariates.
+  n_effec = n_effec,
+  y_effect = y_effect  # Direct estimation.
+)
+```
+
+## Compiling the Model in `STAN`
+  
+```{r, eval=FALSE}
+fit_FH_binomial <- "www/04_FH_Beta_y_Binomial/14FH_binomial.stan"
+
+model_FH_Binomial <- stan(
+  file = fit_FH_binomial,  
+  data = sample_data,   
+  verbose = FALSE,
+  warmup = 500,         
+  iter = 1000,            
+  cores = 4              
+)
+
+saveRDS(model_FH_Binomial,
+file = "www/04_FH_Beta_y_Binomial/model_FH_Binomial.rds")
+```
+
+
+## Results of the Model for Observed Domains
+
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "PPC for the Binomial Area Model"}
+knitr::include_graphics("www/04_FH_Beta_y_Binomial/05_Fig_pcc_Bin.PNG")
+```
+
+## Graphic Analysis of the Convergence of $\sigma^2_u$ Chains
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "Chains Trace"}
+knitr::include_graphics("www/04_FH_Beta_y_Binomial/06_Fig_Sigma_Bin.PNG")
+```
+
+## Poverty Map with Binomial Area Response Model 
+
+```{r echo=FALSE, out.width = "500px", out.height="250px", fig.cap= "Poverty Map with Binomial Area Response Model"}
+knitr::include_graphics("www/04_FH_Beta_y_Binomial/07_Fig_Mapa_Bin.PNG")
+```
+
+## Coefficient of Variation Map for Poverty
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "Coefficient of Variation Map"}
+knitr::include_graphics("www/04_FH_Beta_y_Binomial/08_Fig_Mapa_Bin_cv.PNG")
+```
+
+# Unit Models
+
+## Unit Model for Mean Income Estimation
+
+- This methodology, known as "pseudo-EBP," is a nested error model that incorporates survey expansion factors. This model is based on the concept of best empirical predictor, incorporating information from population census microdata.
+
+- Unlike other nested error models by Battese, Harter, and Fuller (BHF), it does not require prior knowledge or estimation of the model's residual variance. This makes the methodology more accessible and practical.
+
+## Higher Level of Disaggregation in Estimates
+
+- Under certain conditions, these models allow for a higher level of disaggregation in estimates. This means that we can generate estimates at the municipal, provincial, or communal level, broken down by various characteristics, such as ethnic self-identification, age group, gender, disability, and others, if individual-level covariates are available.
+
+## Unit Model Estimation Method
+
+To estimate the mean income of individuals, i.e.,
+
+$$
+\bar{Y}_d = \frac{\sum_{U_d}y_{di}}{N_d}
+$$
+
+where $y_{di}$ is the income of each person. Note that,
+
+$$
+\bar{Y}_d =  \frac{\sum_{s_d}y_{di} + \sum_{s^c_d}y_{di}}{N_d}
+$$
+
+## Unit Model Prediction
+
+The estimator for $\bar{Y}$ is given by:
+
+$$
+\hat{\bar{Y}}_d = \frac{\sum_{s_d}y_{di} + \sum_{s^c_d}\hat{y}_{di}}{N_d}
+$$
+
+where
+
+$$\hat{y}_{di}=E_{\mathscr{M}}\left(y_{di}\mid\boldsymbol{x}_{d},\boldsymbol{\beta}\right)$$,
+
+where $\mathscr{M}$ refers to the probability measure induced by the model. Thus, it holds that:
+
+$$
+\hat{\bar{Y}}_d = \frac{\sum_{U_{d}}\hat{y}_{di}}{N_d}
+$$
+
+
+## Unit Model Definition
+
+- We are applying a Bayesian model to predict the mean income in unobserved areas. This is based on the assumption that the mean incomes $Y_{di}$ follow a normal distribution with a mean $\mu_{di}$ and variance $\sigma_e^{2}$.
+
+- The mean $\mu_{di}$ is related to individual characteristics $\boldsymbol{X}$ through a set of parameters $\boldsymbol{\beta}$, along with a domain-specific effect $u_{d}$ and an estimation error term $e_{di}$.
+
+- The model:
+
+```{=tex}
+\begin{eqnarray*}
+Y_{di} & \sim & N\left(\mu_{di},\sigma_e^{2}\right)\\
+\mu_{di} &=& \boldsymbol{x}_{di}^{T}\boldsymbol{\beta}+u_{d}+e_{di}
+\end{eqnarray*}
+```
+
+## Unit Model Definition
+
+- Both $u_{d}$ and $e_{di}$ follow normal distributions with means of zero and variances $\sigma^2_{u}$ and $\sigma^2_{e}$, respectively.
+
+- We have set non-informative prior distributions for the parameters $\beta_k$ and $\sigma^2_y$. This means that we assume we have little prior information about these parameters and therefore do not assign specific prior distributions to them.
+
+```{=tex}
+\begin{eqnarray*}
+\beta_k  &\sim  &N(0, 1000)\\
+\sigma^2_y &\sim & Inverse-Gamma(0.0001,0.0001)
+\end{eqnarray*}
+```
+
+
+
+## Reading Libraries and R Functions
+
+-   *plot_interaction*: This function creates a line plot to study the interaction between variables. If there is an overlap of lines, it is recommended to include the interaction in the model.
+
+-   *Aux_Agregado*: This function allows obtaining estimates at different levels of aggregation, which becomes relevant when a repetitive process is performed.
+
+```{r, eval=FALSE}
+library(rstan)
+library(rstanarm)
+source("www/05_Mod_Ingreso/01_funtions.R")
+```
+**These functions are specifically designed for this process.**
+
+## Standardized Household Surveys
+
+The original database is recoded as follows:
+
+- Years of education (**anoest**) are recoded as:
+  - 1 → No education
+  - 2 → 1 - 6 years
+  - 3 → 7 - 12 years
+  - 4 → More than 12 years
+  - 98 → Not applicable
+  - 99 → DK/NA (Don't know/No answer)
+
+- **Sex** is recoded as:
+  - 1 → Male
+  - 2 → Female
+
+- Ethnic self-recognition (**etnia**) is recoded as:
+  - 1 → Indigenous
+  - 2 → Afro-descendant
+  - 3 → Other
+
+## Standardized Household Surveys
+
+- **Age** is recoded as:
+  - 1 → 0 - 14
+  - 2 → 15 - 29
+  - 3 → 30 - 44
+  - 4 → 45 - 64
+  - 5 → 65 and older
+
+- Urban/rural area (**área**) is recoded as:
+  - 0 → Rural
+  - 1 → Urban
+- $logingreso = \log(ingreso)$
+
+
+## Survey Dataset
+
+```{r,eval=FALSE}
+encuesta_mrp <- 
+  readRDS("www/05_Mod_Ingreso/encuesta_estan.rds")
+
+```
+
+```{r,echo=FALSE}
+readRDS("www/05_Mod_Ingreso/01_tabla_encuesta.rds") %>% 
+  select(-dam,-ingreso,-lp,-li,-fep)  %>%
+  tba(cap = "Standardized Survey")
+```
+
+
+## Smoothed Income Histogram
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "Black line: normal distribution, Blue line: smoothed income"}
+knitr::include_graphics("www/05_Mod_Ingreso/02_Fig_densidad_ing.png")
+```
+
+## Creating the Aggregated Survey Database
+
+The result of aggregating the database is shown below:
+
+```{r, eval=FALSE}
+byAgrega <- c("dam", "dam2",  "área", "sexo",
+              "anoest", "edad",   "etnia")
+
+encuesta_df_agg <-
+  encuesta_mrp %>%
+  group_by_at(all_of(byAgrega)) %>%
+  summarise(n = n(),
+            logingreso = mean(logingreso),
+            .groups = "drop") 
+```
+
+
+## Aggregated Survey
+
+Computational processes are optimized when working with aggregated surveys.
+
+```{r,echo=FALSE}
+readRDS("www/05_Mod_Ingreso/03_tabla_encuesta_agg.rds") %>% 
+  head(5) %>% select(-dam) %>% 
+  tba(cap = "Aggregated Survey")
+```
+
+Next, we add the covariates.
+
+```{r, eval=FALSE}
+encuesta_df_agg <- 
+  inner_join(encuesta_df_agg, statelevel_predictors_df)
+```
+
+## Defining the Multilevel Model
+
+After organizing the survey, we can move on to defining the model.
+
+```{r, eval = FALSE}
+fit <- stan_lmer(
+  logingreso ~                  # Log of Mean Income (Y)
+    (1 | dam2) +                # Random Effect (ud)
+    edad +                      # Fixed Effect (Covariates X)
+    sexo  + tasa_desocupacion +
+    luces_nocturnas + cubrimiento_cultivo +
+    cubrimiento_urbano ,
+  weights = n,                  # Number of observations.
+  data = encuesta_df_agg,       # Aggregated survey
+  verbose = TRUE,               # Show progress
+  chains = 4,                   # Number of chains.
+  iter = 1000 )                 # Number of chain realizations
+saveRDS(fit, file = "Data/fit_ingresos.rds")
+```
+
+## Convergence Check
+
+```{r, eval=FALSE}
+library(posterior)
+library(bayesplot)
+p1 <-
+  (mcmc_dens_chains(fit, pars = "sigma") +
+     mcmc_areas(fit, pars = "sigma")) /
+  mcmc_trace(fit, pars = "sigma")
+ggsave(p1,
+  plot = "www/05_Mod_Ingreso/04_Fig_sigma_ing.png" )
+```
+
+## Chains for $\sigma^2$ 
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "Chains Trace"}
+knitr::include_graphics("www/05_Mod_Ingreso/04_Fig_sigma_ing.png")
+```
+
+## Posterior Distribution of Coefficients
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "Posterior Distribution for Betas"}
+knitr::include_graphics("www/05_Mod_Ingreso/05_Fig_beta_ing.png")
+```
+
+## Model Results in the Survey 
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "PPC for Income"}
+knitr::include_graphics("www/05_Mod_Ingreso/06_Fig_Ingreso.PNG")
+```
+
+## Model Results in the Survey 
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "PPC for Log Income"}
+knitr::include_graphics("www/05_Mod_Ingreso/07_Fig_Log_Ingreso.PNG")
+```
+
+## Income Prediction with the Unit Model
+
+The prediction process starts with the reading of the previously standardized aggregated census, which is then joined with the covariate dataset, resulting in the following table.
+
+```{r, eval=FALSE}
+poststrat_df <-
+  readRDS("www/05_Mod_Ingreso/censo_dam2.rds") %>% 
+   left_join(statelevel_predictors_df)
+```
+
+
+```{r, echo = FALSE}
+tabla_poststrat <- readRDS("www/05_Mod_Ingreso/08_tabla_poststrat.rds")
+tba( tabla_poststrat %>% select(2:8) %>% head(5),
+     cap = "Aggregated Census and Covariates")
+```
+
+## Posterior Distribution
+
+To obtain a posterior distribution for each observation, you can use the `posterior_epred` function as follows:
+
+```{r, eval=FALSE}
+epred_mat <- posterior_epred(
+  fit, newdata = poststrat_df, 
+  type = "response")
+```
+
+
+## Income in Terms of Poverty Lines
+
+To express the estimate of average income in terms of poverty lines, you can use the following code:
+
+```{r,eval=FALSE}
+lp <- encuesta_mrp %>% distinct(área,lp,li))
+```
+
+
+```{r,eval=TRUE,echo=FALSE}
+tabla_lp <- 
+  readRDS("www/05_Mod_Ingreso/09_tabla_linea_pobreza.rds")
+tba(tabla_lp, "Poverty Lines")
+```
+
+```{r, eval=FALSE}
+lp <- inner_join(poststrat_df,lp,by = "área") %>% 
+  select(lp)
+
+epred_mat <- (exp(epred_mat)-1)/lp$lp
+```
+
+## Estimation of National Average Income
+
+The process reduces to matrix operations, which are organized in the `Aux_Agregado` function:
+
+```{r, eval=FALSE}
+mrp_estimate_Ingresolp <-
+  Aux_Agregado(poststrat = poststrat_df,
+             epredmat = epred_mat,
+             byMap = NULL)
+```
+
+```{r, echo=FALSE}
+tabla_est <- 
+  readRDS("www/05_Mod_Ingreso/10_tabla_estimacion.rds")
+tba(tabla_est$mrp_estimate_Ingresolp, 
+    cap =  "Estimation of National Average Income")
+```
+
+## Estimation of Average Income by Administrative Division
+
+In a similar way, it is possible to obtain results for administrative divisions:
+
+```{r, eval=FALSE}
+mrp_estimate_dam2 <-
+  Aux_Agregado(poststrat = poststrat_df,
+             epredmat = epred_mat,
+             byMap = "dam2")
+```
+
+```{r,echo=FALSE}
+tba(tabla_est$mrp_estimate_dam2 %>% head(5),
+    cap =  "Estimation by Administrative Division.")
+```
+
+## Map of Average Income with the Unit Model
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "Average Income Map with the Unit Model"}
+knitr::include_graphics("www/05_Mod_Ingreso/11_Fig_Mapa_COL.PNG")
+```
+
+## Poverty Estimation from Income
+
+Let:
+
+$$
+y_{ji} = 
+\begin{cases}
+1 & \text{if } \text{income}_{ji} \leq \text{lp}\\
+0 & \text{otherwise}
+\end{cases}
+$$
+
+Where $\text{income}_{ji}$ represents the income of the $i$-th person in the $j$-th post-stratum, and $\text{lp}$ is a threshold, in particular, the poverty line.
+
+```{r, eval=FALSE}
+epred_mat_pobreza_lp <- (exp(epred_mat) - 1) <= lp$lp
+```
+
+## Poverty Estimation
+
+The process is simplified by applying the previous function.
+
+```{r, eval=FALSE}
+(mrp_estimate_Ingresolp <-
+  Aux_Agregado(poststrat = poststrat_df,
+             epredmat = epred_mat_pobreza_lp,
+             byMap = NULL)
+)
+```
+
+```{r, echo=FALSE}
+tabla_est_pobreza <- 
+  readRDS("www/05_Mod_Ingreso/12_tabla_pobreza.rds")
+tba(tabla_est_pobreza$mrp_estimate_Ingresolp, 
+    cap =  "Poverty Estimation")
+```
+
+
+## Poverty Estimation by dam2
+
+Similarly, it is possible to obtain results for administrative divisions.
+
+```{r, eval=FALSE}
+mrp_estimate_dam2 <-
+  Aux_Agregado(poststrat = poststrat_df,
+             epredmat = epred_mat,
+             byMap = "dam2")
+```
+
+```{r,echo=FALSE}
+tba(tabla_est_pobreza$mrp_estimate_dam2 %>% head(5),
+    cap =  "Estimation by administrative divisions." )
+```
+
+## Poverty Map by the Unit Model
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "Poverty Map from Mean Income"}
+knitr::include_graphics("www/05_Mod_Ingreso/13_Fig_Mapa_COL_Pobreza.PNG")
+```
+
+## Unit Model for Poverty Estimation
+
+- Logistic regression is used when the dependent variable is binary since it allows estimating the probability of the studied event.
+
+- To obtain probability estimates, a logarithmic transformation known as the _logit_ is performed.
+
+- The logit is calculated as the logarithm of the probability of success divided by the probability of failure:
+
+$$\ln\left(\frac{\theta}{1-\theta}\right)$$
+
+where $\theta$ is the probability of success.
+
+## Unit Model with Binary Response
+  - A random effects logistic regression model is employed to relate the expectation $\theta_{ji}$ of this variable to available covariates $x_{ji}$ and the random effect $u_d$.
+
+  - The model is expressed as: 
+  $$\ln\left(\frac{\theta_{ji}}{1-\theta_{ji}}\right) = \boldsymbol{x}_{ji}^{T}\boldsymbol{\beta}+u_d$$.
+
+  - The coefficients $\boldsymbol{\beta}$ are the fixed effects of the variables on the probabilities, and $u_d$ are random effects.
+  
+## Prior Distributions
+
+The prior distributions are non-informative and are assumed as follows:
+
+```{=tex}
+\begin{eqnarray*}
+\beta_k  &\sim  &N(0, 1000)\\
+\sigma^2_y &\sim & Inverse-Gamma(0.0001,0.0001)
+\end{eqnarray*}
+
+```
+
+## Estimation Process
+
+- Estimate the proportion of people below the poverty line: 
+
+$$P_d = \frac{\sum_{U_d}y_{di}}{N_d}$$.
+
+- The estimator is calculated as: 
+
+$$\hat{P} = \frac{\sum_{s_d}y_{di} + \sum_{s^c_d}\hat{y}_{di}}{N_d}$$.
+
+  Where $\hat{y}_{di}$ is the expected value of $y_{di}$ under the model.
+
+
+## Estimation in `R`
+
+The process starts with the definition of poverty using the poverty line defined by CEPAL as follows:
+
+```{r, eval=FALSE}
+encuesta_mrp %<>% mutate( 
+pobreza = ifelse(ingreso < lp,1,0))
+```
+
+
+## Creating a Base with Aggregated Survey Data
+
+Similar to the income model, we now count the number of people below the poverty line aggregated by certain variables.
+
+```{r, eval=FALSE}
+encuesta_df_agg <-
+  encuesta_mrp %>%                     # Survey Data  
+  group_by_at(all_of(byAgrega)) %>%   
+  summarise(n = n(),                   # Number of observations
+  # Count of people with similar characteristics.           
+       pobreza = sum(pobreza),
+       no_pobreza = n-pobreza,
+      .groups = "drop") %>%     
+  arrange(desc(pobreza))              # Sort the dataset.
+```
+
+
+## Aggregated Table
+
+The result of aggregating the database is shown below:
+
+```{r, echo=FALSE}
+readRDS("www/06_Mod_Pobreza/01_tabla_agg_pobreza.rds") %>% 
+  head(5) %>% select(-dam,-n) %>% 
+  tba(cap = "Count of people in poverty")
+```
+
+Now, the covariates are incorporated.
+
+```{r, eval=FALSE}
+encuesta_df_agg %<>%
+  inner_join(statelevel_predictors_df)
+```
+
+## Unit Model in STAN
+
+After arranging the survey, we can proceed with the definition of the model.
+
+```{r, eval = FALSE}
+fit <- stan_glmer(
+  cbind(pobreza, no_pobreza) ~                              
+    (1 | dam2) +             # Random effect (ud)
+    edad +                   # Fixed effect (X variables)
+    sexo  + tasa_desocupacion +
+    luces_nocturnas + cubrimiento_cultivo +
+    cubrimiento_urbano ,
+    data = encuesta_df_agg, # Aggregated survey 
+    verbose = TRUE,         # Show progress
+    chains = 4,             # Number of chains
+    iter = 100, cores = 4,
+    family = binomial(link = "logit")
+)
+saveRDS(fit, file = "www/06_Mod_Pobreza/fit_pobreza.rds")
+```
+
+## Posterior Distribution of Coefficients
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "Posterior distribution of coefficients"}
+knitr::include_graphics("www/06_Mod_Pobreza/02_Fig_posterior_coef.png")
+```
+
+## Trace of Chains for Coefficients
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "Chains of coefficients"}
+knitr::include_graphics("www/06_Mod_Pobreza/03_Fig_posterior_coef_cadena.png")
+```
+
+## Model Results in the Survey
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "PPC for poverty"}
+knitr::include_graphics("www/06_Mod_Pobreza/04_Fig_ppc_pobreza.PNG")
+```
+
+## Poverty Prediction with the Unit Model
+
+The prediction process begins with the reading of the previously standardized aggregated census, then it is joined with the covariate database, resulting in the following table.
+
+```{r, eval=FALSE}
+poststrat_df <-
+  readRDS("www/06_Mod_Pobreza/censo_dam2.rds") %>% 
+   left_join(statelevel_predictors_df)
+```
+
+```{r, echo = FALSE}
+tabla_poststrat <- readRDS("www/06_Mod_Pobreza/05_tabla_poststrat.rds")
+tba( tabla_poststrat %>% select(2:8) %>% head(5),
+     cap = "Aggregated Census and Covariates")
+```
+
+
+## Posterior Distribution
+
+To obtain a posterior distribution for each observation, you can use the *posterior_epred* function as follows:
+
+```{r, eval=FALSE}
+epred_mat <- posterior_epred(
+  fit, newdata = poststrat_df, 
+  type = "response")
+```
+
+## Estimating the Poverty Rate
+
+Similar to the income model, you can use the *Aux_Agregado* function to obtain poverty rate estimates.
+
+```{r, echo=FALSE}
+tablas_pobreza <- readRDS("www/06_Mod_Pobreza/tablas.rds")
+```
+
+```{r, eval=FALSE}
+(mrp_estimate_Ingresolp <-
+  Aux_Agregado(poststrat = poststrat_df,
+             epredmat = epred_mat,
+             byMap = NULL)
+) %>% tba()
+```
+
+```{r, echo=FALSE}
+mrp_estimate_Ingresolp <- tablas_pobreza$mrp_estimate_Ingresolp
+tba(mrp_estimate_Ingresolp, "Poverty Rate Estimation")
+```
+
+## Estimating the Poverty Rate by dam2
+
+Similarly, you can obtain results for the administrative divisions of the country.
+
+```{r, eval=FALSE}
+mrp_estimate_dam2 <-
+  Aux_Agregado(poststrat = poststrat_df,
+             epredmat = epred_mat,
+             byMap = "dam2")
+```
+
+```{r, echo=FALSE}
+mrp_estimate_dam2 <- tablas_pobreza$mrp_estimate_dam2
+tba(mrp_estimate_dam2 %>% head(5) )
+```
+
+
+## Estimated Poverty Map with the Unit Model
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "Poverty Map with Unit Model"}
+knitr::include_graphics("www/06_Mod_Pobreza/06_Fig_Map_COL.PNG")
+```
+
+# Unit Model Multidimensional Deprivation Index (MDI)
+
+## Introducción
+
+- Poverty is a crucial topic on the national and international agenda, as evidenced by the first goal of the 2030 Sustainable Development Agenda.
+- Traditionally, poverty has been measured in a one-dimensional way, based on income and expenses.
+- Addressing poverty from a multidimensional perspective allows us to capture a broader range of factors that affect the quality of life.
+
+## Multidimensional Poverty Index (MPI)
+
+- The MPI is a measure that assesses poverty by considering multiple dimensions of well-being.
+- It is calculated using weights and thresholds based on different indicators of quality of life.
+- The MPI is a variant of the FGT methodology (Foster, Greer, and Thorbecke, 1984) used to measure one-dimensional poverty.
+
+## MPI Equation
+
+- It is expressed as an average of censored deprivation scores, as detailed in the following equations:
+
+$$
+MPI = \frac{1}{N}\sum_{i=1}^{N}c_i(z)
+$$
+
+Where:
+
+- $N$ is the number of individuals or households in the population.
+
+- $c_i(z)$ is the censored deprivation score of observation $i$.
+
+## Calculation of $c_i(z)$
+The way to obtain $c_i(z)$ is given by the following equation:
+
+- If $q_i \ge z$, then $c_i$ will be equal to $q_i$.
+- If $q_i < z$, then $c_i$ will be equal to $0$.
+
+Where: $q_i = \sum_{k=1}^{K} w_k \cdot y_{i}^{k}$, where $K$ is the number of dimensions or indicators of deprivation, $w_k$ is the weight associated with dimension $k$, and $y_{i}^{k}$ is a binary variable.
+
+## Components of the MPI:
+
+1. **Headcount Ratio (H):**
+
+   - Measures the proportion of people deprived in at least one dimension of poverty.
+   - It is calculated as the number of people deprived in at least one dimension over the total population.
+   
+$$H = \frac{1}{N} \sum_{i=1}^{N} I\left( q_{i} \ge z \right) = \frac{N\left(z\right)}{N}$$ 
+
+where $N\left(z\right) =  \sum_{i=1}^{N} I\left( q_{i} \ge z \right)$
+
+2. **Intensity of Deprivation (A):**
+
+   - Measures the average intensity of deprivation among the deprived people.
+   - It is calculated as the average of deprivation scores for those individuals who are deprived in at least one dimension.
+   
+$$A = \sum_{i=1}^{N}\frac{c_{i}\left(z\right)}{N\left(z\right)}$$
+   
+
+## Calculation of the MPI from H and A
+
+- The MPI is obtained by multiplying the values of H and A.
+- Mathematically, it is expressed as the average of censored deprivation scores.
+
+$$
+MPI = \frac{N\left(z\right)}{N} \times \sum_{i=1}^{N} \frac{c_{i}\left(z\right)}{N\left(z\right)} = \frac{1}{N} \sum_{i=1}^{N} c_{i}\left(z\right)
+$$
+
+## Unit Model for MPI
+
+- In many applications, the variable of interest in small areas is binary, meaning $y_{dj}$ takes values of 0 or 1, representing the absence or presence of a specific characteristic.
+
+- The estimation objective in each domain $d = 1, \cdots , D$ is the proportion $\theta_d = \frac{1}{N_d}\sum_{i=1}^{N_d}y_{di}$ of the population that exhibits this characteristic.
+
+- The logit of $\theta_{di}$ is defined as 
+$$
+\ln \left(\frac{\theta_{di}}{1-\theta_{di}}\right) = \eta_{di} =  \boldsymbol{x}_{di}^{T}\boldsymbol{\beta} + u_{d}
+$$
+
+where $\boldsymbol{\beta}$ is a vector of fixed effect parameters, and $u_d$ is a specific random effect for the area in domain $d$ with $u_d \sim N\left(0, \sigma^2_u \right)$.
+
+
+## Unit Model for MPI
+
+- The $u_d$ are independent, and $y_{di}\mid u_d \sim Bernoulli(\theta_{di})$ with $E(y_{di}\mid u_d)=\theta_{di}$ and $Var(y_{di}\mid u_d)=\sigma_{di}^2=\theta_{di}(1-\theta_{di})$.
+- $\boldsymbol{x}_{di}^T$ represents a vector of $p\times 1$ values of $p$ auxiliary variables.
+
+- Thus, $\theta_{di}$ can be expressed as: 
+
+$$
+\theta_{di} = \frac{\exp(\boldsymbol{x}_{di}^T\boldsymbol{\beta} + u_{d})}{1+ \exp(\boldsymbol{x}_{di}^T\boldsymbol{\beta} + u_{d})}
+$$
+
+**The model is estimated for each dimension.**
+
+## Prior Distributions
+
+As is traditional, non-informative prior distributions are used:
+
+```{=tex}
+\begin{eqnarray*}
+\beta_k  &\sim  &N(0, 1000)\\
+\sigma^2_y &\sim & Inverse-Gamma(0.0001,0.0001)
+\end{eqnarray*}
+
+```
+
+
+
+## Estimation of MPI Using Unit Models
+
+- Estimate the proportion of people who have the $k$-th deprivation, that is, $P_d = \frac{\sum_{U_d}c_{di}(z)}{N_d}$.
+
+- The estimator of $P$ is calculated as:
+
+$$
+\hat{P}_d = \frac{\sum_{s_d}c_{di}(z) + \sum_{s^c_d}\hat{c}_{di}(z)}{N_d}
+$$
+
+where $\hat{c}_{di}(z)$ is defined as:
+
+- If $\hat{q}_{di}\ge z$, then $c_{di}$ is equal to $\hat{q}_{di}$
+- If $\hat{q}_{di} < z$, then $c_{di}$ is equal to $0$
+
+
+## Estimation of $q_{di}$
+
+The estimation of $\hat{q}$ is given by
+
+$$
+\hat{q}_{di} =  \sum_{k=1}^{K} w_k \cdot \hat{y}_{di}^{k}
+$$
+
+where
+
+$$
+\hat{y}_{di}^{k}=E_{\mathscr{M}}\left(y_{di}^{k}\mid\boldsymbol{x}_{d},\boldsymbol{\beta}\right)
+$$
+
+Thus, the estimator of $P$ is obtained for each domain $d$.
+
+
+## Estimation of $\theta^{k}_{di}$
+
+The estimation of $\theta^{k}_{di}$ reflects the probability that a specific unit $i$ in domain $d$ obtains the value 1 in dimension $k$. To carry out this estimation, we follow the following procedure:
+
+$$
+\bar{Y}^{k}_d = \theta^{k}_d = \frac{1}{N_d} \sum_{i=1}^{N_d} y^{k}_{di}
+$$
+
+Here, $y^{k}_{di}$ can take values of 0 or 1, representing the absence (or presence) of a specific feature.
+
+## Estimation of $\theta^{k}_{di}$
+
+Divide the sum into two parts: $s_d$, representing the units observed in a sample, and $s_d^c$, which are the unobserved units. Therefore,
+
+$$
+\bar{Y}^{k}_d = \theta^{k}_d =  \frac{1}{N_d}\left(\sum_{s_d}y^{k}_{di} + \sum_{s^c_d}y^{k}_{di} \right)
+$$
+
+## Estimation of $\theta^{k}_{di}$
+
+Through a unit model, it is possible to predict $y^{k}_{di}$ for the unobserved units. In this way, the estimator of $\theta^{k}_d$ is expressed as:
+
+$$
+\hat{\theta}^{k}_d = \frac{1}{N_d}\left( \sum_{s_d}y^{k}_{di} + \sum_{s^c_d}\hat{y}^{k}_{di} \right)
+$$
+
+Where,
+
+$$\hat{y}^{k}_{di}=E_{\mathscr{M}}\left(y^{k}_{di}\mid\boldsymbol{x}_{d},\boldsymbol{\beta}\right)$$
+
+
+## Estimation of $\theta^{k}_{di}$
+
+The estimation $\hat{\theta}^{k}_d$ simplifies to:
+
+$$
+\hat{\theta}^{k}_d = \frac{1}{N_d}\sum_{i=1}^{N_d}\hat{y}^{k}_{di}
+$$
+
+This approach allows for the estimation of the probability $\theta^{k}_d$ in domain $d$ in dimension $k$ using predictions and available data rather than relying on detailed individual information for all cases.
+
+## Prediction of "Hard Estimates"
+
+- Hobza and Morales (2016) define "hard estimates" as binary values (0 or 1) that precisely indicate whether an individual has a specific feature regarding each multidimensional deprivation indicator.
+
+- The estimation of $\theta^{k}_{di}$ reflects the probability that a specific unit $i$ in domain $d$ obtains the value 1 in dimension $k$.
+
+- Therefore, $\hat{y}^{k}_{di} \sim Bernoulli(\hat{\pi}^{k}_{di})$ is defined, where $\hat{y}^{k}_{di}$ are the "hard" estimates.
+
+## Point Estimation of the MPI
+
+The proposed procedure for estimating the MPI is as follows:
+
+1. Use sample data to fit a Bernoulli unit-level logit model for each indicator. This is accomplished using the Markov Chain Monte Carlo (MCMC) algorithm with $L$ iterations.
+
+2. For each dimension $k$ for which a unit-level Bernoulli logit model was estimated with $L$ iterations, predict the values $\hat{y}^{k}_{di}$ for each individual in the census. This will generate $L$ random realizations of $\hat{y}^{k}_{di}$.
+
+3. Let $\hat{y}_{di}^{kl}$ denote the $l$-th random realization of dimension $k$ for individual $i$ in domain $d$. Calculate $q_{di}^{l} = \sum_{k=1}^{K} w_k \cdot y_{di}^{kl}$.
+
+
+
+## Point Estimation of the MPI
+
+From the calculated values for $q_{di}$, $H_d^{l}$, $A_d^{l}$, and $MPI_{d}^{l}$ can be calculated using the equations:
+
+$$
+MPI_{d}^{l} = \frac{1}{N_d}\sum_{i=1}^{N_{d}}c_{di}^{l}\left(z\right)
+$$
+
+$$
+H_d^{l}=\frac{1}{N_{d}}\sum_{i=1}^{N_{d}}I\left(q_{di}^{l}\ge z\right)=\frac{N_{d}^{l}\left(z\right)}{N_{d}}
+$$
+
+and
+
+$$
+A_{d}^{l}=\sum_{i=1}^{N_{d}}\frac{c_{di}^{l}\left(z\right)}{N^{l}_{d}\left(z\right)}
+$$
+
+## Point Estimation of the MPI
+
+4. The point estimation of $H_d$, $A_{d}$, and $MPI_{d}$ in each small area $d$ is calculated by taking the average over the $L$ iterations:
+
+$$
+\hat{H}_d = \frac{1}{L}\sum_{l=1}^{L}H_d^l,
+$$
+
+$$
+\hat{A}_d = \frac{1}{L}\sum_{l=1}^{L}A_d^l
+$$
+and
+$$
+\widehat{MPI}_d = \frac{1}{L}\sum_{l=1}^{L}MPI_d^l
+$$
+
+## Estimation of the Variance for the MPI
+
+5. Since the model was estimated using the MCMC algorithm, it is possible to estimate the estimation error as follows:
+
+$$
+\widehat{Var}(\hat{H}_d) = \frac{1}{L}\sum_{l=1}^{L}\left( H^{l}_{d} -\hat{H}_d \right)^2
+$$
+
+$$
+\widehat{Var}(\hat{A}_d) = \frac{1}{L}\sum_{l=1}^{L}\left( A^{l}_{d} -\hat{A}_d \right)^2
+$$
+
+and
+
+$$
+\widehat{Var}(\widehat{MPI}_d) = \frac{1}{L}\sum_{l=1}^{L}\left( MPI_d^{l} -\widehat{MPI}_d \right)^2
+$$
+
+
+## Multidimensional Poverty Index in Colombia
+
+In Colombia, there are 9 indicators that are measured as deprivations: $y_{di}^{k} = 1$ if the person experiences the deprivation, and $y_{di}^{k} = 0$ if the person does not experience the deprivation.
+
+The index requires information for each individual $i = 1, \ldots, N_d$ in the domains $d = 1, \ldots, D$, where $N_d$ denotes the population size of domain $d$.
+
+For this study, we use the value of 0.4 for $z$, meaning $I(\cdot)$ is equal to 1 when $q_{di} \ge 0.4$. The value of $q_{di}$ in domain $d$ is calculated as:
+
+$$
+  q_{di} = \frac{1}{16}(y_{di}^{1} + y_{di}^{2} + y_{di}^{3} + y_{di}^{4}) + \frac{1}{12}(y_{di}^{5} + y_{di}^{6} + y_{di}^{7}) + \frac{1}{4}(y_{di}^{8} + y_{di}^{9})
+$$
+
+## Deprivations Calculated for Colombia
+
+a. $y_{di}^{1}$ = Deprivation in housing construction material.
+
+b. $y_{di}^{2}$ = Overcrowding in the household.
+
+c. $y_{di}^{3}$ = Lack of access to the Internet service.
+
+d. $y_{di}^{4}$ = Lack of access to electrical energy service.
+
+e. $y_{di}^{5}$ = Deprivation in sanitation.
+
+f. $y_{di}^{6}$ = Deprivation of access to clean drinking water.
+
+g. $y_{di}^{7}$ = Deprivation in health.
+
+h. $y_{di}^{8}$ = Deprivation of education.
+
+i. $y_{di}^{9}$ = Deprivation of employment and social protection.
+
+## Dimensions of Deprivations
+
+The previous deprivations are grouped by dimensions as follows:
+
+```{r echo=FALSE, out.width = "400px", out.height="250px", fig.cap= "MPI dimensions and weights"}
+knitr::include_graphics("www/07_Mod_IPM/01_CEPAL_IPM.png")
+```
+
+## Household Survey with Deprivation Indicators
+
+In the following table, you can see a sample of the $y_{di}^k$ indicators for Colombia.
+
+```{r, eval=TRUE, echo=FALSE}
+readRDS("www/07_Mod_IPM/02_tablas_nbi.rds") %>% 
+  tba(cap = "Deprivation Indices in Colombia")
+```
+
+## Process for Aggregating the Surveys
+
+Reading the survey and defining variables for aggregation
+
+```{r,eval=FALSE}
+encuesta_ipm <- 
+  readRDS("www/07_Mod_IPM/encuesta_nbi.rds")
+
+byAgrega <- c("dam", "dam2", "área", "sexo",
+              "etnia", "anoest",  "edad")
+
+names_ipm <- grep(pattern = "nbi",
+                  names(encuesta_ipm), value = TRUE)
+```
+
+## Process for Aggregating the Surveys
+
+The process is repeated for each of the deprivations, and it is automated as follows:
+
+```{r, eval=FALSE}
+encuesta_df <- map(
+  setNames(names_ipm, names_ipm),
+   function(y) {
+    encuesta_ipm$temp <- as.numeric(encuesta_ipm[[y]])
+    encuesta_ipm %>%
+    group_by_at(all_of(byAgrega)) %>%
+     summarise( n = n(), yno = sum(temp),
+     ysi = n - yno, .groups = "drop"
+    ) %>%
+  inner_join(statelevel_predictors_df,
+  by = c("dam", "dam2"))
+})
+saveRDS(encuesta_df,
+        "www/07_Mod_IPM/03_tabla_encuesta_agg.rds")
+```
+
+## Sample of the Resulting Datasets
+
+The resulting datasets look like this:
+
+```{r, echo=FALSE}
+tabla_agg_ipm <-
+  readRDS("www/07_Mod_IPM/03_tabla_encuesta_agg.rds")[["nbi_matviv_ee"]] %>%
+  head(10) %>% select(2:6, 8:12)
+tba(tabla_agg_ipm,
+    cap = "Deprivation in Housing Construction Material")
+```
+
+## Define the Model
+
+```{r, eval=FALSE}
+names_cov <-  statelevel_predictors_df %>%
+  dplyr::select(-dam,-dam2) %>% names()
+names_cov <- c("sexo","área",names_cov[16:19])
+efec_aleat <-
+  paste0("(1|",  c("dam", "etnia"), ")",
+         collapse = "+")
+formula_mod <-  formula(paste(
+    " cbind(yno, ysi) ~", efec_aleat,
+    "+",  paste0(names_cov,
+           collapse = " + ")
+  ))
+
+formula_mod
+```
+```
+cbind(yno, ysi) ~ (1 | dam) + (1 | etnia) + exo + área +
+tasa_desocupacion + luces_nocturnas + cubrimiento_cultivo +
+cubrimiento_urbano
+```
+
+## Running the Models
+
+```{r, eval = FALSE}
+plan(multisession, workers = 4)
+
+fit <- future_map(encuesta_df, function(xdat){
+stan_glmer(formula = formula_mod ,
+  family = binomial(link = "logit"),
+  data = xdat,
+  cores = 4,
+  chains = 4,
+  iter = 500
+)}, 
+.progress = TRUE)
+
+saveRDS(object = fit, "www/07_Mod_IPM/Modelos/fits_IPM.rds")
+```
+
+
+
+## Predicting $\theta_{di}^{kl}$
+
+- The models were compiled separately, so we have an `.rds` object for each deprivation that makes up the MPI.
+
+- The process is illustrated for water deprivation, but it is the same for the other deprivations.
+
+## Prediction on the Census Data
+
+```{r, eval=FALSE}
+censo_ipm <-
+  readRDS("www/07_Mod_IPM/04_tabla_censo.rds")
+
+fit_agua <-
+  readRDS(file = "www/07_Mod_IPM/Modelos/fit_agua.rds")
+
+epred_mat_agua <-
+  posterior_epred(
+    fit_agua,
+    newdata = poststrat_df,
+    type = "response",
+    allow.new.levels = TRUE
+  )
+
+```
+
+## Defining the Hard Estimates
+
+In this code, we predict $\theta_{di}^{kl}$ for water deprivation using the compiled model. The predictions are stored in `epred_mat_agua`. We also create hard estimates by randomly sampling from these predictions and save them as `epred_mat_agua_dummy` in an RDS file.
+
+```{r, eval=FALSE}
+epred_mat_agua_dummy <-
+  rbinom(
+    n = nrow(epred_mat_agua) * ncol(epred_mat_agua), 1,
+         epred_mat_agua)
+
+epred_mat_agua_dummy <- matrix(
+  epred_mat_agua_dummy,
+  nrow = nrow(epred_mat_agua),
+  ncol = ncol(epred_mat_agua)
+)
+saveRDS(epred_mat_agua_dummy,
+        "www/07_Mod_IPM/Dummys/epred_mat_agua_dummy.rds")
+```
+
+
+
+## Calculating $q_{di}^{l}$
+
+The calculation of $q^{l}_{id}$ is a simple matrix operation.
+
+```{r, eval=FALSE}
+chain_q  <-
+  # Housing and services
+  (1 / 16) * ( epred_mat_material_dummy +
+               epred_mat_hacinamiento_dummy +
+               epred_mat_energia_dummy +
+               epred_mat_tic_dummy
+  ) +
+  # Health
+  (1 / 12) * (epred_mat_agua_dummy +
+              epred_mat_saneamiento_dummy +
+              epred_mat_salud_dummy) +
+  # Education
+  (1 / 4) * epred_mat_educacion_dummy  +
+  # Employment
+  (1 / 4) * epred_mat_empleo_dummy
+```
+
+## Calculating $I\left( q_{di}^{l} \ge z \right)$ and $c_{di}^{l}\left(z\right)$
+
+```{r, echo=FALSE, eval=FALSE}
+chain_q <- readRDS("www/07_Mod_IPM/chain_q.rds")
+```
+
+Now, it is possible to calculate $I\left( q_{di}^{l} \ge z \right)$, taking $z = 0.4$ as the threshold.
+
+```{r, eval=FALSE}
+chain_Ind <- chain_q
+chain_Ind[chain_Ind < 0.4] <- 0
+chain_Ind[chain_Ind != 0] <- 1
+```
+
+Next, we calculate $c_{di}^{l}\left(z\right)$.
+
+```{r, eval=FALSE}
+chain_ci <- matrix(0, nrow = nrow(chain_q),
+                   ncol = ncol(chain_q))
+chain_ci[chain_Ind == 1] <- chain_q[chain_Ind == 1]
+```
+
+## Results obtained in the first iterations
+
+```{r, echo=FALSE}
+iteration_data <- readRDS("www/07_Mod_IPM/05_tabla_l_iter.rds")
+tba(iteration_data[,-c(3,6,9)], cap = "Chains obtained")
+```
+
+## Disaggregated MPI Estimates
+
+To obtain disaggregated MPI estimates, a function was developed to facilitate the calculation, for example, by administrative division (*dam2*).
+
+```{r, eval=FALSE}
+source("www/07_Mod_IPM/06_Estimar_ipm.R")
+ipm_dam2 <- estime_IPM(
+  poststrat = censo_ipm,
+  chain_ci = chain_ci,
+  chain_ind = chain_ind,
+  byMap = "dam2"
+) %>% data.frame()
+```
+
+## Disaggregated MPI Estimates
+
+```{r, echo=FALSE}
+ipm_dam2 <- readRDS("www/07_Mod_IPM/09_tabla_dam2.rds") %>% 
+  head(10)
+tba(ipm_dam2, "Estimates by administrative division")
+```
+
+## IPM Estimates by Deprivation
+  - It is essential to analyze each dimension individually.
+  - This allows for a better understanding of the complexity of poverty and the design of effective strategies.
+  - "Hard estimates" are used to calculate the estimates for each deprivation.
+  - The process is applied similarly to all deprivations.
+
+## Estimation Process
+
+To streamline the calculation process, the **aggregated_dim_ipm** function is created to perform the calculations. Here's how to use it:
+
+```{r, eval=FALSE}
+source("www/07_Mod_IPM/07_Fun_agregado.r")
+
+epred_mat_agua_dummy <- 
+readRDS("www/07_Mod_IPM/Dummys/epred_mat_agua_dummy.rds")
+
+datos_dam_agua <- 
+  aggregated_dim_ipm(poststrat = censo_ipm,
+           epredmat = epred_mat_agua_dummy,
+           byMap = "dam2")
+```
+
+## Estimation by Administrative Division
+
+```{r, echo=FALSE}
+datos_dam2_agua <- 
+  readRDS("www/07_Mod_IPM/10_tabla_dam2_agua.rds") %>% 
+  head(10)
+tba(datos_dam2_agua,
+    cap = "Estimation by dam2 for water deprivation")
+```
+
+## Results for All Deprivations
+\small
+```{r, echo=FALSE}
+tabla_dam2 <- readRDS("www/07_Mod_IPM/11_tabla_estimate_dam2.rds")
+temp <- spread(tabla_dam2 %>% select(-estimate_se),
+       key = "Indicador",value = "estimate") %>% 
+  head(10) %>% select(-c(6,8:10))
+tba(temp, cap = "Point Estimate by Municipality and Dimension")
+```
+## Results for All Deprivations
+\small
+```{r, echo=FALSE}
+temp <- spread(tabla_dam2 %>% select(-estimate),
+       key = "Indicador",value = "estimate_se") %>% 
+  rename_if(is.numeric, .funs = function(x)paste0(x,"_se")) %>% 
+  head(10) %>% select(-c(6,8:10))
+tba(temp, cap = "Estimation Error by Municipality and Dimension")
+
+```
+
+## Map of MPI Components
+
+```{r echo=FALSE, out.width = "400px", out.height="350px", fig.cap= "MPI Components"}
+knitr::include_graphics("www/07_Mod_IPM/12_Fig_mapa_COL_ipm.jpeg")
+```
+
+## Map of Deprivations that Compose the MPI
+
+```{r echo=FALSE, out.width = "450px", out.height="650px", fig.cap= "Deprivations of MPI"}
+knitr::include_graphics("www/07_Mod_IPM/13_Fig_mapa_privacion.jpeg")
+```
+
+
+# Area Model for Labor Market Statistics
+
+## Definition of the Multinomial Model
+
+- Let $K$ be the number of categories of the variable of interest $Y \sim multinomial\left(\boldsymbol{\theta}\right)$, with $\boldsymbol{\theta}=\left(p_{1},p_{2},\dots ,p_{k}\right)$ and $\sum_{k=1}^{K}p_{k}=1$.
+
+- Let $N_i$ be the number of elements in the i-th domain, and $N_{ik}$ be the number of elements that belong to the k-th category. Note that $\sum_{k=1}^{K}N_{ik}=N_{i}$ and $p_{ik}=\frac{N_{ik}}{N_{i}}$.
+
+- Let $\hat{p}_{ik}$ be the direct estimate of $p_{ik}$ and $v_{ik}=Var\left(\hat{p}_{ik}\right)$, and denote the variance estimator as $\hat{v}_{ik}=\widehat{Var}\left(\hat{p}_{ik}\right)$.
+
+## Considerations for the Multinomial Model
+
+The design effect varies by category; therefore, the first step is to define the effective sample size per category. 
+
+The estimation of $\tilde{n}$ is given by 
+$$\tilde{n}_{ik} = \frac{(\tilde{p}_{ik}\times(1-\tilde{p}_{ik}))}{\hat{v}_{ik}}$$,
+
+$$\tilde{y}_{ik}=\tilde{n}_{ik}\times\hat{p}_{ik}$$
+
+then, $\hat{n}_{i} = \sum_{k=1}^{K}\tilde{y}_{ik}$  from which it follows that $\hat{y}_{ik} = \hat{n}_i\times \hat{p}_{ik}$.
+
+
+## Multinomial Area Model
+
+Let $\boldsymbol{\theta}=\left(p_{1},p_{2}, p_{3}\right)^{T}=\left(\frac{N_{i1}}{N_{i}},\frac{N_{i2}}{N_{i}},\frac{N_{i3}}{N_{i}}\right)^{T}$; then the multinomial model for the i-th domain would be given by:
+
+$$
+\left(\tilde{y}_{i1},\tilde{y}_{i2},\tilde{y}_{i3}\right)\mid\hat{n}_{i},\boldsymbol{\theta}_{i}\sim multinomial\left(\hat{n}_{i},\boldsymbol{\theta}_{i}\right)
+$$
+
+Now, you can write $p_{ik}$ as:
+
+$\ln\left(\frac{p_{i2}}{p_{i1}}\right)=\boldsymbol{X}_{i}^{T}\boldsymbol{\beta}_{2} + u_{i2}$ and
+$\ln\left(\frac{p_{i3}}{p_{i1}}\right)=\boldsymbol{X}_{i}^{T}\boldsymbol{\beta}_{3}+ u_{i3}$
+
+## Multinomial Area Model
+
+Given the constraint $1 = p_{i1} + p_{i2} + p_{i3}$, then
+
+$$p_{i1} + p_{i1}(e^{\boldsymbol{X}_{i}^{T}\boldsymbol{\beta}_{2}}+  u_{i2})+p_{i1}(e^{\boldsymbol{X}_{i}^{T}\boldsymbol{\beta}_{3}} + u_{i3})$$
+
+from which it follows that
+
+$$
+p_{i1}=\frac{1}{1+e^{\boldsymbol{X}_{i}^{T}\boldsymbol{\beta}_{2}}+ u_{i2}+e^{\boldsymbol{X}_{i}^{T}\boldsymbol{\beta}_{2}}+ u_{i3}}
+$$
+
+## Multinomial Area Model
+
+The expressions for $p_{i2}$ and $p_{i3}$ would be as follows:
+
+$$
+p_{i2}=\frac{e^{\boldsymbol{X}_{i}^{T}\boldsymbol{\beta}_{2}} + u_{i2}}{1+e^{\boldsymbol{X}_{i}^{T}\boldsymbol{\beta_{2}}}+ u_{i2}+e^{\boldsymbol{X_{i}}^{T}\boldsymbol{\beta_{2}}}+ u_{i3}}
+$$
+
+$$
+p_{i3}=\frac{e^{\boldsymbol{X}_{i}^{T}\boldsymbol{\beta}_{3}}+ u_{i3}}{1+e^{\boldsymbol{X}_{i}^{T}\boldsymbol{\beta_{2}}}+ u_{i2}+e^{\boldsymbol{X_{i}}^{T}\boldsymbol{\beta_{3}}}+ u_{i3}}
+$$
+
+
+## Direct Estimation by Municipality
+
+- A surveyed person can be in one of the following states: employed, unemployed, or inactive.
+
+- For each domain, the number of employed, unemployed, and inactive people in each domain is calculated, and the proportion of people in each of these categories is estimated with their respective standard errors and design effects.
+
+## Selection of Domains
+
+```{r, echo=FALSE}
+domain_indicator <- readRDS("www/08_Mod_Trabajo/01_Estimate_dir.Rds")
+```
+
+- Several quality measures are employed, including counting the number of domains that have two or more primary sampling units (PSUs), as well as a design effect greater than 1 and variances greater than 0.
+
+- The selected domains are:
+
+    - Domains with two or more PSUs.
+    
+    - Having a result in the DEFF.
+    
+    
+The number of selected domains was `r nrow(domain_indicator)`.
+
+## STAN Programming for the Model: `functions`
+
+Create a function that simplifies the calculations.
+\scriptsize
+```
+functions {
+  matrix pred_theta(matrix Xp, int p, matrix beta){
+  int D1 = rows(Xp);
+  real num1[D1, p];
+  real den1[D1];
+  matrix[D1,p] theta_p;
+  for(d in 1:D1){
+    num1[d, 1] = 1;
+    num1[d, 2] = exp(Xp[d, ] * beta[1, ]' ) ;
+    num1[d, 3] = exp(Xp[d, ] * beta[2, ]' ) ;
+    den1[d] = sum(num1[d, ]);
+  }
+  for(d in 1:D1){
+    for(i in 2:p){
+    theta_p[d, i] = num1[d, i]/den1[d];
+    }
+    theta_p[d, 1] = 1/den1[d];
+   }
+ return theta_p  ;
+  }}
+```
+
+## STAN Programming for the Model: `data` and `parameters`
+\small
+```
+data {
+  int<lower=1> D; // Number of domains 
+  int<lower=1> P; // Categories
+  int<lower=1> K; // Number of regressors
+  int y_tilde[D, P]; // Data matrix
+  matrix[D, K] X_obs; // Covariate matrix
+  int<lower=1> D1; // Number of domains 
+  matrix[D1, K] X_pred; // Covariate matrix
+}
+parameters {
+  matrix[P-1, K] beta; // Parameter matrix 
+  real<lower=0> sigma2_u1;
+  real<lower=0> sigma2_u2;
+  vector[D] u1;
+  vector[D] u2;
+}
+```
+
+
+## STAN Programming for the Model: `transformed parameters`
+\scriptsize
+```
+transformed parameters {
+  simplex[P] theta[D]; // Parameter vector
+  real num[D, P];
+  real den[D];
+  real<lower=0> sigma_u1;
+  real<lower=0> sigma_u2;
+  sigma_u1 = sqrt(sigma2_u1); 
+  sigma_u2 = sqrt(sigma2_u2); 
+  for(d in 1:D){
+    num[d, 1] = 1;
+    num[d, 2] = exp(X_obs[d, ] * beta[1, ]' + u1[d]) ;
+    num[d, 3] = exp(X_obs[d, ] * beta[2, ]' + u2[d]) ;
+    den[d] = sum(num[d, ]);
+  }
+  for(d in 1:D){
+    for(p in 2:P){
+    theta[d, p] = num[d, p]/den[d];
+    }
+    theta[d, 1] = 1/den[d];
+  }
+}
+```
+
+## STAN Programming for the Model: `model`
+
+```
+model {
+ u1 ~ normal(0, sigma_u1);
+ u2 ~ normal(0, sigma_u2);
+ sigma2_u1 ~  inv_gamma(0.0001, 0.0001);
+ sigma2_u2 ~  inv_gamma(0.0001, 0.0001);
+ for(p in 2:P){
+    for(k in 1:K){
+      beta[p-1, k] ~ normal(0, 10000);
+    }
+}
+for(d in 1:D){
+    target += multinomial_lpmf(y_tilde[d, ] | theta[d, ]); 
+  }
+}
+```
+
+## STAN Programming for the Model: `generated quantitie`
+
+```
+generated quantities {
+  matrix[D1,P] theta_pred;
+  theta_pred = pred_theta(X_pred, P, beta);
+}
+```
+
+## Identifying Unobserved Domains
+
+Select the variables for the model and create the covariate matrix.
+
+```{r, eval=FALSE}
+names_cov <- c("dam2", "unemployment_rate", "overcrowding", "earth_floor", "night_lights", "crop_cover", "human_modification")
+X_pred <- anti_join(
+    statelevel_predictors_df %>%
+    select(all_of(names_cov)),
+    indicador_dam1 %>% select(dam2)
+)
+```
+
+## Unobserved Domains
+
+Create the covariate matrix for unobserved domains (`X_pred`) and observed domains (`X_obs`).
+
+```{r, eval=FALSE}
+X_pred <- X_pred %>%
+    data.frame() %>%
+    select(-dam2) %>%
+    as.matrix()
+
+X_obs <- inner_join(
+    indicador_dam1 %>%
+    select(dam2, id_order),
+    statelevel_predictors_df %>% 
+    select(all_of(names_cov))
+) %>%
+arrange(id_order) %>%
+data.frame() %>%
+select(-dam2, -id_order) %>%
+as.matrix()
+```
+
+
+## Calculating the Effective Sample Size ($n_{\text{eff}}$) and $\tilde{y}$
+
+```{r, eval=FALSE}
+D <- nrow(indicador_dam1)
+P <- 3 # Occupied, Unoccupied, Inactive.
+Y_tilde <- matrix(NA, D, P)
+n_tilde <- matrix(NA, D, P)
+Y_hat <- matrix(NA, D, P)
+
+# Effective sample size for Occupied
+n_tilde[,1] <- (indicador_dam1$Ocupado * (1 - indicador_dam1$Ocupado)) /
+  indicador_dam1$Ocupado_var
+Y_tilde[,1] <- n_tilde[,1] * indicador_dam1$Ocupado
+```
+
+## Calculating the Effective Sample Size ($n_{\text{eff}}$) and $\tilde{y}$
+
+```{r, eval=FALSE}
+n_tilde[,2] <- (indicador_dam1$Desocupado * (1 - indicador_dam1$Desocupado)) /
+  indicador_dam1$Desocupado_var
+
+Y_tilde[,2] <- n_tilde[,2] * indicador_dam1$Desocupado
+
+# Effective sample size for Inactive
+n_tilde[,3] <- (indicador_dam1$Inactivo * (1 - indicador_dam1$Inactivo)) /
+  indicador_dam1$Inactivo_var
+
+Y_tilde[,3] <- n_tilde[,3] * indicador_dam1$Inactivo
+```
+
+## Calculating $\hat{Y}$ and $\hat{n}_i$
+
+```{r, eval=FALSE}
+ni_hat <- rowSums(Y_tilde)
+Y_hat[,1] <- ni_hat * indicador_dam1$Ocupado
+Y_hat[,2] <- ni_hat * indicador_dam1$Desocupado
+Y_hat[,3] <- ni_hat * indicador_dam1$Inactivo
+Y_hat <- ceiling(Y_hat)
+```
+
+## Creating a data list for `STAN`
+
+```{r, eval=FALSE}
+X1_obs <- cbind(matrix(1,nrow = D,ncol = 1),X_obs)
+K = ncol(X1_obs)
+D1 <- nrow(X_pred)
+X1_pred <- cbind(matrix(1,nrow = D1,ncol = 1),X_pred)
+
+sample_data <- list(D = D,
+                    P = P,
+                    K = K,
+                    y_tilde = Y_hat,
+                    X_obs = X1_obs,
+                    X_pred = X1_pred,
+                    D1 = D1)
+```
+
+## Compiling the model in `STAN` 
+\small
+```{r, eval=FALSE}
+fit_mcmc2 <- stan(
+file = "www/08_Mod_Trabajo/00_Multinomial_simple_no_cor.stan", 
+  data = sample_data, 
+ verbose = TRUE,
+  warmup = 1000,# number of warmup iterations per chain
+  iter = 2000,  # total number of iterations per chain
+  cores = 4,    # number of cores (could use one per chain)
+)
+
+saveRDS(fit_mcmc2,
+        "www/08_Mod_Trabajo/fit_multinomial_no_cor.Rds")
+```
+
+## Model Validation
+
+Model validation is essential to assess its ability to predict future outcomes accurately and reliably. In the case of an area model with a multinomial response, validation focuses on measuring the model's accuracy in predicting the different response categories.
+
+## Posterior Predictive Checking
+
+```{r echo=FALSE, out.width = "400px", out.height="350px", fig.cap= "PPC Multinomial Model"}
+knitr::include_graphics("www/08_Mod_Trabajo/02_Fig_ppc.png")
+```
+
+## Parameter Estimation
+
+Parameter estimations are obtained directly from the chains generated by STAN. The process involves organizing the information to match each of the domains, and as a result, the following table is obtained:
+
+```{r, echo=FALSE}
+readRDS("www/08_Mod_Trabajo/03_estimaciones_stan.rds") %>% 
+  select(dam2,Ocupado_mod:Inactivo_mod) %>% head(5) %>% 
+  tba(cap = "Multinomial Model Estimation")
+
+```
+
+## Benchmarking Methodology
+
+The benchmarking process must be performed for each of the categories following the steps that were previously carried out. The distribution of the weights is shown below.
+
+```{r echo=FALSE, out.width = "300px", out.height="550px", fig.cap= "Weights Distribution"}
+knitr::include_graphics("www/08_Mod_Trabajo/04_Plot_Bench_gk.jpeg")
+```
+
+## Labor Market Indicators Maps
+
+```{r echo=FALSE, out.width = "400px", out.height="300px", fig.cap= "Employed Maps"}
+knitr::include_graphics("www/08_Mod_Trabajo/05_Ocupados.png")
+```
+
+## Labor Market Indicators Maps
+
+```{r echo=FALSE, out.width = "400px", out.height="300px", fig.cap= "Unemployed Maps"}
+knitr::include_graphics("www/08_Mod_Trabajo/06_Desocupados.png")
+```
+
+## Labor Market Indicators Maps
+
+```{r echo=FALSE, out.width = "400px", out.height="300px", fig.cap= "Inactive Maps"}
+knitr::include_graphics("www/08_Mod_Trabajo/07_Inactivo.png")
+```
+
+
+## Thank You!
+
+::: yellow
+*Email*: [andres.gutierrez\@cepal.org](mailto:andres.gutierrez@cepal.org){.email}
+:::
+
+

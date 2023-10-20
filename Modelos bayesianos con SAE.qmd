@@ -1113,7 +1113,8 @@ tba(tabla2, cap = "Conteo de dominios seleccionados")
 Para este proceso se realiza la transformación $\log(\hat{\sigma}^2_d)$ y la selección de las columnas identificador del municipio (`dam2`), la estimación directa  (`pobreza`), el número de personas en el dominio (`nd`) y la varianza estimada (`vardir`). 
 
 ```{r, echo=FALSE}
-tabla3 <- readRDS("www/01_FGV/03_tabla_FGV.rds") %>% head(5)
+baseFGV <- readRDS("www/01_FGV/03_tabla_FGV.rds")
+tabla3 <- baseFGV %>% head(5)
 tba(tabla3, cap = "Set datos para la FGV")
 ```
 
@@ -1129,7 +1130,7 @@ include_graphics("www/01_FGV/04_fig_FGV.png")
 El modelo definido para el conjunto de datos es el siguiente.
 
 $$
-\log(\hat{\sigma}^2) = \hat{\theta}_{dir} + n_{d}^2 + \sqrt{\hat{\theta}_{dir}}
+\log(\hat{\sigma}^2) = \hat{\theta}_{dir} + n_{d}^2 + \sqrt{\hat{\theta}_{dir}\times n_{d}}
 $$
 El resultado del modelo se muestra a continuación: 
 
@@ -1147,7 +1148,7 @@ A partir de la estimación del modelo se debe obtener el  valor de la constante 
 
 ```{r, eval=FALSE}
 delta.hat = sum(baseFGV$vardir) / 
-  sum(exp(fitted.values(FGV1)))
+  sum(exp(fitted.values(mod_fgv)))
 ```
 
 Por último se tiene la varianza suavizada. 
@@ -1156,7 +1157,7 @@ Por último se tiene la varianza suavizada.
 hat.sigma <- 
   data.frame(
     dam2 = baseFGV$dam2,
-    hat_var = delta.hat * exp(fitted.values(FGV1)))
+    hat_var = delta.hat * exp(fitted.values(mod_fgv)))
 ```
 
 ## Validación de resultados. 
@@ -1193,7 +1194,7 @@ $$.
 El mejor predictor lineal insesgado (BLUP) bajo el modelo Fay Herriot se calcula como $\tilde{\theta}_{d}^{FH}$, y se basa en el uso de $\gamma_d$ para ponderar adecuadamente el estimador directo y la información auxiliar, permitiendo una estimación más precisa de los indicadores en áreas pequeñas. Su ecuación esta dada por: 
 
 $$
-\tilde{\theta}_{d}^{FH} = \boldsymbol{x}^{T}{d}\tilde{\boldsymbol{\beta}}+\tilde{u}_{d}
+\tilde{\theta}_{d}^{FH} = \boldsymbol{x}^{T}_{d}\tilde{\boldsymbol{\beta}}+\tilde{u}_{d}
 $$,
 
 donde $\tilde{u}_d = \gamma_d\left(\hat{\theta}^{DIR}_{d} - \boldsymbol{x}^{T}_{d}\tilde{\boldsymbol{\beta}} \right)$ y $\gamma_d=\frac{\sigma^2_u}{\sigma^2_u + \sigma^2_{e_d}}$.
@@ -3179,7 +3180,7 @@ knitr::include_graphics("www/07_Mod_IPM/13_Fig_mapa_privacion.jpeg")
 
 ## Consideraciones para el modelo multinomial.  
 
-El efecto diseño cambia entre categoría, por tanto, lo primero será definir el tamaño de muestra efectivo por categoría. Esto es:
+El efecto diseño cambia entre categoría, por tanto, lo primero será definir el tamaño de muestra efectivo por categoría.
 
 La estimación de $\tilde{n}$ esta dado por $\tilde{n}_{ik} = \frac{(\tilde{p}_{ik}\times(1-\tilde{p}_{ik}))}{\hat{v}_{ik}},$
 
@@ -3246,7 +3247,7 @@ indicador_dam1 <- readRDS("www/08_Mod_Trabajo/01_Estimate_dir.Rds")
 El número de dominios seleccionados fue de `r nrow(indicador_dam1)`
 
 ## Modelo programando en `STAN`
-Crear una función que simplifica los calculos. 
+Crear una función que simplifica los cálculos. 
 \scriptsize
 ```
 functions {
@@ -3343,7 +3344,7 @@ generated quantities {
 
 ```
 
-## Dominios observados
+## Indetificando los dominos no observados
 
 Seleccionar las variables del modelo y crear matriz de covariables.
   
